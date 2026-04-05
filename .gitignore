@@ -1,1 +1,6 @@
 .worktrees
+target/
+.idea/
+*.iml
+node_modules/
+dist/
