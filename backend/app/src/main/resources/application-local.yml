@@ -1,0 +1,14 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/smartinvest
+    username: smartadmin
+    password: localdev_only
+  jpa:
+    show-sql: true
+
+jwt:
+  secret: local-dev-secret-key-minimum-256-bits-long-padded-here
+
+logging:
+  level:
+    com.smartinvest: DEBUG
