@@ -9,6 +9,8 @@ dist/
 .DS_Store
 .claude/
 .vscode/
-doc-manually/
 docs/
 .terraform/
+/doc-manually/Smart Invest User Guide_en-US.pdf
+/doc-manually/Smart_invest_Develop_prompt_v2.txt
+/doc-manually/Smart_invest_Develop_prompt_v3_minimx.txt

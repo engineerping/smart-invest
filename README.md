@@ -43,19 +43,22 @@ See `docs/superpowers/plans/` for the full implementation plan.
 - Docker (for local PostgreSQL)
 - AWS CLI configured
 
-### Local Development
+### Service Management
 
 ```bash
-# Start PostgreSQL
-docker compose up -d postgres
+# === PostgreSQL (Docker) ===
+docker compose up -d postgres      # Start
+docker compose down                # Stop
 
-# Run backend
+# === Backend ===
 cd backend
-mvn spring-boot:run -pl app -am
+mvn spring-boot:run -pl app -am   # Start (http://localhost:8080)
+# Stop: Ctrl+C or kill the Maven process
 
-# Run frontend
+# === Frontend ===
 cd frontend
-npm run dev
+npm run dev              # Start (http://localhost:5173)
+lsof -ti:5173 | xargs kill   # Stop
 ```
 
 ### Deploy to AWS
