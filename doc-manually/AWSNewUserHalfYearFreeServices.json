@@ -1,0 +1,222 @@
+{
+  "aws_free_tier_services": {
+    "account_type": "新免费账户计划（2025年7月15日后注册）",
+    "credits": {
+      "initial_credit": "$100",
+      "additional_credit": "$100（通过完成特定活动获得）",
+      "total_available": "$200",
+      "duration": "6个月或积分用完为止"
+    },
+    "always_free_services": [
+      {
+        "service": "AWS Lambda",
+        "category": "计算",
+        "usage_frequency": "最常用",
+        "limits": {
+          "requests": "每月100万次免费请求",
+          "compute_time": "每月400,000 GB-秒计算时间"
+        },
+        "microservice_use": "函数计算、API后端、事件处理"
+      },
+      {
+        "service": "Amazon DynamoDB",
+        "category": "数据库",
+        "usage_frequency": "最常用",
+        "limits": {
+          "storage": "每月25 GB存储空间",
+          "read_requests": "每月200万次读取请求",
+          "write_requests": "每月100万次写入请求"
+        },
+        "microservice_use": "NoSQL数据库、用户数据存储"
+      },
+      {
+        "service": "Amazon CloudWatch",
+        "category": "监控",
+        "usage_frequency": "最常用",
+        "limits": {
+          "custom_metrics": "10个自定义指标",
+          "api_requests": "每月100万次API请求",
+          "log_ingestion": "每月5 GB日志数据摄取",
+          "alarms": "10个告警指标"
+        },
+        "microservice_use": "应用监控、日志管理、性能指标"
+      },
+      {
+        "service": "Amazon API Gateway",
+        "category": "网络",
+        "usage_frequency": "常用",
+        "limits": {
+          "rest_api_calls": "每月100万次REST API调用",
+          "http_api_calls": "每月100万次HTTP API调用",
+          "websocket_messages": "每月100万条WebSocket消息"
+        },
+        "microservice_use": "API网关、服务路由、请求管理"
+      },
+      {
+        "service": "Amazon SNS",
+        "category": "消息",
+        "usage_frequency": "常用",
+        "limits": {
+          "publishes": "每月1,000次免费发布",
+          "http_deliveries": "每月100,000次HTTP/HTTPS传递",
+          "email_deliveries": "每月1,000次电子邮件传递"
+        },
+        "microservice_use": "消息通知、服务间通信"
+      },
+      {
+        "service": "Amazon SES",
+        "category": "邮件",
+        "usage_frequency": "常用",
+        "limits": {
+          "emails": "每月3,000封免费邮件（前12个月）"
+        },
+        "microservice_use": "邮件发送、用户通知"
+      },
+      {
+        "service": "AWS IAM",
+        "category": "安全",
+        "usage_frequency": "常用",
+        "limits": {
+          "usage": "完全免费"
+        },
+        "microservice_use": "身份认证、权限管理、安全控制"
+      },
+      {
+        "service": "Amazon CloudFormation",
+        "category": "基础设施",
+        "usage_frequency": "常用",
+        "limits": {
+          "api_calls": "每月1,000次API调用"
+        },
+        "microservice_use": "基础设施即代码、自动化部署"
+      },
+      {
+        "service": "AWS Step Functions",
+        "category": "工作流",
+        "usage_frequency": "专业用途",
+        "limits": {
+          "state_transitions": "每月4,000次状态转换"
+        },
+        "microservice_use": "服务编排、工作流管理"
+      },
+      {
+        "service": "Amazon EventBridge",
+        "category": "事件",
+        "usage_frequency": "专业用途",
+        "limits": {
+          "events": "每月100万次事件"
+        },
+        "microservice_use": "事件驱动架构、服务解耦"
+      },
+      {
+        "service": "AWS CodeCommit",
+        "category": "开发工具",
+        "usage_frequency": "中等",
+        "limits": {
+          "users": "5个活跃用户",
+          "storage": "每月50 GB存储",
+          "git_requests": "每月10,000次Git请求"
+        },
+        "microservice_use": "代码版本控制"
+      },
+      {
+        "service": "AWS CodeBuild",
+        "category": "开发工具",
+        "usage_frequency": "中等",
+        "limits": {
+          "build_minutes": "每月100分钟构建时间"
+        },
+        "microservice_use": "持续集成、代码构建"
+      },
+      {
+        "service": "AWS X-Ray",
+        "category": "监控",
+        "usage_frequency": "较少使用",
+        "limits": {
+          "traces": "每月100,000条跟踪记录",
+          "trace_retrieval": "每月100万条跟踪检索"
+        },
+        "microservice_use": "分布式追踪、性能分析"
+      },
+      {
+        "service": "AWS Certificate Manager",
+        "category": "安全",
+        "usage_frequency": "其他",
+        "limits": {
+          "usage": "SSL/TLS证书免费"
+        },
+        "microservice_use": "HTTPS安全连接"
+      },
+      {
+        "service": "AWS Budgets",
+        "category": "成本管理",
+        "usage_frequency": "其他",
+        "limits": {
+          "budgets": "前2个预算免费"
+        },
+        "microservice_use": "成本监控"
+      }
+    ],
+    "credit_based_services": [
+      {
+        "service": "Amazon EC2",
+        "category": "计算",
+        "eligible_instances": [
+          "t3.micro",
+          "t3.small", 
+          "t4g.micro",
+          "t4g.small",
+          "c7i-flex.large",
+          "m7i-flex.large"
+        ],
+        "microservice_use": "容器运行、应用托管"
+      },
+      {
+        "service": "Amazon S3",
+        "category": "存储",
+        "microservice_use": "静态文件存储、数据备份"
+      },
+      {
+        "service": "Amazon RDS",
+        "category": "数据库",
+        "eligible_instances": [
+          "db.t3.micro",
+          "db.t4g.micro"
+        ],
+        "supported_engines": [
+          "MySQL",
+          "PostgreSQL", 
+          "MariaDB",
+          "SQL Server Express"
+        ],
+        "microservice_use": "关系型数据库"
+      },
+      {
+        "service": "Amazon Aurora DSQL",
+        "category": "数据库",
+        "limits": {
+          "dpu": "每月100,000 DPU",
+          "storage": "每月1 GB存储"
+        },
+        "microservice_use": "分布式SQL数据库"
+      },
+      {
+        "service": "Amazon CloudFront",
+        "category": "CDN",
+        "microservice_use": "内容分发、静态资源加速"
+      }
+    ],
+    "microservice_architecture_feasibility": {
+      "可行性": "高度可行",
+      "推荐架构": "无服务器微服务架构",
+      "核心服务组合": [
+        "AWS Lambda（业务逻辑）",
+        "Amazon API Gateway（API网关）", 
+        "Amazon DynamoDB（数据存储）",
+        "Amazon CloudWatch（监控日志）",
+        "Amazon SNS（消息通知）",
+        "AWS IAM（安全管理）"
+      ]
+    }
+  }
+}

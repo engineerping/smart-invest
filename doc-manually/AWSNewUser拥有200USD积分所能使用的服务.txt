@@ -1,0 +1,125 @@
+关于使用 $200 积分购买 EKS 服务
+可以使用，但需要注意成本：
+
+EKS 定价：
+
+标准 EKS 集群：每小时 $0.10（每月约 $72）
+扩展支持版本：每小时 $0.60（每月约 $432）
+使用 $200 积分的情况：
+
+如果只运行一个标准 EKS 集群，您的 $200 积分可以支持约 2.8 个月的集群运行时间
+但您还需要为 工作节点（EC2 实例）、存储（EBS 卷）和网络流量等额外付费
+这些额外成本可能会快速消耗您的积分
+重要提醒：
+
+EKS 不包含在免费账户计划的永久免费服务中
+您需要升级到付费账户计划才能访问 EKS
+免费账户计划只能访问 30 多项永久免费服务，不包括所有 AWS 服务
+您可以访问的免费服务列表（按使用频率排序）
+最常用的免费服务：
+AWS Lambda
+
+每月 100 万次免费请求
+每月 400,000 GB-秒的计算时间
+Amazon S3
+
+通过积分使用（不是永久免费）
+Amazon EC2
+
+免费实例类型：t3.micro, t3.small, t4g.micro, t4g.small, c7i-flex.large, m7i-flex.large
+通过积分使用
+Amazon DynamoDB
+
+每月 25 GB 存储空间
+每月 200 万次读取请求
+每月 100 万次写入请求
+Amazon CloudWatch
+
+10 个自定义指标
+100 万次 API 请求
+5 GB 日志数据摄取
+常用的免费服务：
+Amazon SNS
+
+每月 1,000 次免费发布
+每月 100,000 次 HTTP/HTTPS 传递
+每月 1,000 次电子邮件传递
+Amazon SES
+
+每月 3,000 封免费邮件（前 12 个月）
+Amazon API Gateway
+
+每月 100 万次 REST API 调用
+每月 100 万次 HTTP API 调用
+每月 100 万条 WebSocket 消息
+AWS IAM
+
+完全免费的身份和访问管理
+Amazon CloudFormation
+
+每月 1,000 次 API 调用
+中等使用频率的免费服务：
+Amazon RDS
+
+db.t3.micro 和 db.t4g.micro 实例（通过积分）
+支持 MySQL、PostgreSQL、MariaDB、SQL Server Express
+Amazon Aurora DSQL
+
+每月 100,000 DPU
+每月 1 GB 存储
+AWS CodeCommit
+
+5 个活跃用户
+每月 50 GB 存储
+每月 10,000 次 Git 请求
+AWS CodeBuild
+
+每月 100 分钟构建时间
+Amazon Rekognition
+
+每月 1,000 张图像分析
+每月 1,000 个面部元数据对象
+较少使用的免费服务：
+Amazon Comprehend
+
+每月 50,000 个字符的文本分析
+Amazon Translate
+
+每月 200 万个字符翻译
+Amazon Polly
+
+每月 500 万个字符的语音合成
+AWS X-Ray
+
+每月 100,000 条跟踪记录
+每月 100 万条跟踪检索
+Amazon CloudFront
+
+通过积分使用（不是永久免费）
+专业用途的免费服务：
+AWS Step Functions
+
+每月 4,000 次状态转换
+Amazon EventBridge
+
+每月 100 万次事件
+AWS AppSync
+
+每月 250,000 次查询或数据修改操作
+Amazon Pinpoint
+
+每月 5,000 个目标用户
+AWS Device Farm
+
+每月 250 分钟远程访问
+其他永久免费服务：
+AWS Certificate Manager
+Amazon Route 53 Resolver
+AWS CloudShell
+AWS Budgets（前 2 个预算免费）
+AWS Cost and Usage Report
+建议
+对于 EKS 学习：考虑先使用 Amazon ECS 或 AWS Fargate，这些服务在免费套餐中更经济
+监控积分使用：通过 AWS 免费套餐仪表板  密切监控您的积分消耗
+设置预算警报：避免意外超支
+优先使用永久免费服务：最大化利用不会消耗积分的服务
