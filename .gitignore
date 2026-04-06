@@ -4,3 +4,10 @@ target/
 *.iml
 node_modules/
 dist/
+
+#Added manually
+.DS_Store
+.claude/
+.vscode/
+doc-manually/
+docs/
