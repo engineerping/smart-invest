@@ -53,11 +53,19 @@ docker compose down;                # Stop
 # === Backend ===
 # Start (http://localhost:8080)
 cd backend && mvn install -DskipTests && cd app && mvn spring-boot:run -Dspring-boot.run.profiles=local 2>&1 | tail -40;
-# Stop: Ctrl+C or kill the Maven process
+# Kill the Maven process or Ctrl+C
+kill $(lsof -ti :8080) && echo "Backend server stopped"
 
 # === Frontend ===
 cd frontend; npm run dev;              # Start (http://localhost:5173)
 lsof -ti:5173 | xargs kill;   # Stop
+
+# === Seed Data ===
+# 1. Create demo user + order
+./scripts/create-demo-user.sh;
+
+# 2. Seed NAV history (5 years of daily data)
+python3 ./scripts/seed-nav-history.py;
 ```
 
 ### Deploy to AWS
