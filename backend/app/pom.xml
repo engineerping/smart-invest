@@ -57,6 +57,7 @@
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
                 <configuration>
+                    <skip>false</skip> <!-- Without this skip=true, the app will inherit skip=true from the parent and won't run. -->
                     <mainClass>com.smartinvest.SmartInvestApplication</mainClass>
                 </configuration>
             </plugin>
