@@ -1,10 +1,16 @@
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '../../store/authStore';
+import { apiClient } from '../../api/client';
 import PageLayout from '../../components/PageLayout';
 
 export default function SmartInvestHomePage() {
   const logout = useAuthStore(s => s.logout);
   const navigate = useNavigate();
+  const { data: summary } = useQuery<{ totalMarketValue: number }>({
+    queryKey: ['portfolio-summary'],
+    queryFn: () => apiClient.get('/api/portfolio/me/summary').then(r => r.data),
+  });
 
   return (
     <PageLayout>
@@ -18,7 +24,9 @@ export default function SmartInvestHomePage() {
 
       <div className="px-4 py-5 bg-si-light border-b border-si-border">
         <p className="text-xs text-si-gray">Total market value (HKD)</p>
-        <p className="text-2xl font-bold text-si-dark mt-1">1000</p>
+        <p className="text-2xl font-bold text-si-dark mt-1">
+          {summary?.totalMarketValue?.toFixed(2) ?? '—'}
+        </p>
         <button onClick={() => navigate('/holdings')}
           className="mt-2 text-xs text-si-red font-medium">My Holdings ›</button>
       </div>
