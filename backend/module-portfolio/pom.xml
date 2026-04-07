@@ -12,4 +12,12 @@
 
     <artifactId>module-portfolio</artifactId>
     <name>Module Portfolio</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.smartinvest</groupId>
+            <artifactId>module-fund</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+    </dependencies>
 </project>
