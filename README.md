@@ -47,34 +47,33 @@ See `docs/superpowers/plans/` for the full implementation plan.
 
 ```bash
 # === PostgreSQL (Docker) ===
-docker compose up -d postgres      # Start
-docker compose down                # Stop
+docker compose up -d postgres;      # Start
+docker compose down;                # Stop
 
 # === Backend ===
-cd backend
-mvn spring-boot:run -pl app -am   # Start (http://localhost:8080)
+# Start (http://localhost:8080)
+cd backend && mvn install -DskipTests && cd app && mvn spring-boot:run -Dspring-boot.run.profiles=local 2>&1 | tail -40;
 # Stop: Ctrl+C or kill the Maven process
 
 # === Frontend ===
-cd frontend
-npm run dev              # Start (http://localhost:5173)
-lsof -ti:5173 | xargs kill   # Stop
+cd frontend; npm run dev;              # Start (http://localhost:5173)
+lsof -ti:5173 | xargs kill;   # Stop
 ```
 
 ### Deploy to AWS
 
 ```bash
-cd infrastructure
-terraform init
+cd infrastructure;
+terraform init;
 terraform apply -var="admin_cidr=$(curl -s ifconfig.me)/32" \
                 -var="key_pair_name=your-key-pair" \
-                -var="account_id=$(aws sts get-caller-identity --query Account --output text)"
+                -var="account_id=$(aws sts get-caller-identity --query Account --output text)";
 
 # Deploy
-./scripts/deploy.sh
+./scripts/deploy.sh;
 
 # 3. Verify
-curl https://<ec2-ip>/actuator/health
+curl https://<ec2-ip>/actuator/health;
 
 # 4. GitHub Secrets needed:
 AWS_ACCESS_KEY_ID, 
@@ -85,15 +84,16 @@ FRONTEND_BUCKET,
 CF_DISTRIBUTION_ID, 
 API_BASE_URL
 ```
-各变量说明
-变量	作用
-AWS_ACCESS_KEY_ID	AWS API 访问密钥 ID
-AWS_SECRET_ACCESS_KEY	AWS API 访问密钥
-EC2_INSTANCE_ID	你的 EC2 实例 ID，用于 SSH 部署 JAR
-ARTIFACT_BUCKET	存放后端 JAR 的 S3 桶名
-FRONTEND_BUCKET	存放前端构建物的 S3 桶名
-CF_DISTRIBUTION_ID	CloudFront 分配 ID，用于部署后刷新缓存
-API_BASE_URL	后端 API 地址，前端调用时用
+# Variable Descriptions
+| Variable | Description |
+| --- | --- |
+| AWS_ACCESS_KEY_ID | AWS API access key ID |
+| AWS_SECRET_ACCESS_KEY | AWS API access key |
+| EC2_INSTANCE_ID | Your EC2 instance ID for SSH deployment of JAR files |
+| ARTIFACT_BUCKET | Name of the S3 bucket storing backend JAR files |
+| FRONTEND_BUCKET | Name of the S3 bucket storing frontend build artifacts |
+| CF_DISTRIBUTION_ID | CloudFront distribution ID for cache refresh after deployment |
+| API_BASE_URL | Backend API address used by frontend calls |
 
 
 ## Repository Structure

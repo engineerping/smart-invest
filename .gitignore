@@ -14,3 +14,6 @@ docs/
 /doc-manually/Smart Invest User Guide_en-US.pdf
 /doc-manually/Smart_invest_Develop_prompt_v2.txt
 /doc-manually/Smart_invest_Develop_prompt_v3_minimx.txt
+
+#For Python venv
+venv/

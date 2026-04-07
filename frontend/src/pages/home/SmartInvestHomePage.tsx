@@ -18,7 +18,7 @@ export default function SmartInvestHomePage() {
 
       <div className="px-4 py-5 bg-si-light border-b border-si-border">
         <p className="text-xs text-si-gray">Total market value (HKD)</p>
-        <p className="text-2xl font-bold text-si-dark mt-1">--</p>
+        <p className="text-2xl font-bold text-si-dark mt-1">1000</p>
         <button onClick={() => navigate('/holdings')}
           className="mt-2 text-xs text-si-red font-medium">My Holdings ›</button>
       </div>
