@@ -176,7 +176,7 @@ docker compose ps    # 预期：smart-invest-db   Up (healthy)
   <packaging>pom</packaging>
 
   <properties>
-    <java.version>25</java.version>
+    <java.version>21</java.version>
     <mapstruct.version>1.6.0</mapstruct.version>
   </properties>
 
@@ -1266,7 +1266,7 @@ git commit -m "feat(infra): Terraform 模块（VPC/EC2/RDS/S3+CloudFront）"
 触发条件：对 main/develop 的 PR  
 作业：
 
-1. `backend` — `mvn clean verify`（Java 25）
+1. `backend` — `mvn clean verify`（Java 21）
 
 2. `frontend` — `npm ci && npm run build`（Node 20）
 

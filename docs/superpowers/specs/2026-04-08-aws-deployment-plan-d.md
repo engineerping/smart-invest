@@ -1,6 +1,6 @@
 # AWS Deployment Plan D — Enterprise EKS (Financial-Grade, Interview Showcase)
 
-**Audience**: Solutions Architect Professional 面试展示；企业级金融产品生产参考  
+**Audience**: Solutions Architect Professional 企业级金融产品生产参考  
 **Goal**: 金融级安全、弹性伸缩、合规可审计、零停机部署  
 **Cost**: 不考虑成本（约 $2,000-5,000/月，视规模）  
 **Certification alignment**: AWS Certified Solutions Architect – Professional (SAP-C02)

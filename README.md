@@ -18,14 +18,14 @@ A production-grade mobile investment platform built on AWS, Spring Boot, and Rea
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18 + TypeScript + Vite + Tailwind CSS |
-| Backend | Java 21 + Spring Boot 3.3 + JPA/Hibernate |
-| Database | PostgreSQL 16 (RDS db.t3.micro) |
-| Infrastructure | Terraform 1.9 + AWS EC2 + S3 + CloudFront |
-| CI/CD | GitHub Actions |
-| Monitoring | Amazon CloudWatch |
+| Layer          | Technology                                  |
+| -------------- | ------------------------------------------- |
+| Frontend       | React 18 + TypeScript + Vite + Tailwind CSS |
+| Backend        | Java 21 + Spring Boot 3.3 + JPA/Hibernate   |
+| Database       | PostgreSQL 16 (RDS db.t3.micro)             |
+| Infrastructure | Terraform 1.9 + AWS EC2 + S3 + CloudFront   |
+| CI/CD          | GitHub Actions                              |
+| Monitoring     | Amazon CloudWatch                           |
 
 ## Architecture
 
@@ -38,6 +38,7 @@ See `docs/superpowers/plans/` for the full implementation plan.
 ## Getting Started
 
 ### Prerequisites
+
 - Java 21, Maven 3.9+
 - Node.js 20, npm
 - Docker (for local PostgreSQL)
@@ -72,7 +73,6 @@ lsof -ti:5173 | xargs kill;            # Stop
 # 1. Login with demo account 
 demo@smartinvest.com
 password:Demo1234!
-
 ```
 
 ### Deploy to AWS
@@ -99,17 +99,18 @@ FRONTEND_BUCKET,
 CF_DISTRIBUTION_ID, 
 API_BASE_URL
 ```
-# Variable Descriptions
-| Variable | Description |
-| --- | --- |
-| AWS_ACCESS_KEY_ID | AWS API access key ID |
-| AWS_SECRET_ACCESS_KEY | AWS API access key |
-| EC2_INSTANCE_ID | Your EC2 instance ID for SSH deployment of JAR files |
-| ARTIFACT_BUCKET | Name of the S3 bucket storing backend JAR files |
-| FRONTEND_BUCKET | Name of the S3 bucket storing frontend build artifacts |
-| CF_DISTRIBUTION_ID | CloudFront distribution ID for cache refresh after deployment |
-| API_BASE_URL | Backend API address used by frontend calls |
 
+# Variable Descriptions
+
+| Variable              | Description                                                   |
+| --------------------- | ------------------------------------------------------------- |
+| AWS_ACCESS_KEY_ID     | AWS API access key ID                                         |
+| AWS_SECRET_ACCESS_KEY | AWS API access key                                            |
+| EC2_INSTANCE_ID       | Your EC2 instance ID for SSH deployment of JAR files          |
+| ARTIFACT_BUCKET       | Name of the S3 bucket storing backend JAR files               |
+| FRONTEND_BUCKET       | Name of the S3 bucket storing frontend build artifacts        |
+| CF_DISTRIBUTION_ID    | CloudFront distribution ID for cache refresh after deployment |
+| API_BASE_URL          | Backend API address used by frontend calls                    |
 
 ## Repository Structure
 
@@ -120,21 +121,24 @@ infrastructure/    Terraform IaC (VPC, EC2, RDS, S3, CloudFront)
 .github/workflows/ CI/CD pipelines
 scripts/           Deployment and utility scripts
 ```
+
 # What Was Built
 
 ## Backend (48 Java files)
-| Module | Description |
-|--------|-------------|
-| module-user | JWT auth (RS256), registration/login, BCrypt passwords, 6-question risk questionnaire with 5-level scoring |
-| module-fund | Fund catalogue API with filtering, NAV history (3M–5Y), asset allocation, multi-asset endpoint |
-| module-order | Order placement, T+2 settlement date calculator (skips weekends), order reference generation (P-XXXXXX / timestamp format), cancellation |
-| module-portfolio | Holdings query API |
-| module-plan | Monthly investment plan CRUD + termination |
-| module-scheduler | @Scheduled cron — daily 01:00 HKT plan execution, weekday 15:00 NAV simulation |
-| module-notification | SES email stub (logs in dev) |
-| app | Flyway 13 migrations, 11 seed funds, JWT config, AWS config profiles |
+
+| Module              | Description                                                                                                                              |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| module-user         | JWT auth (RS256), registration/login, BCrypt passwords, 6-question risk questionnaire with 5-level scoring                               |
+| module-fund         | Fund catalogue API with filtering, NAV history (3M–5Y), asset allocation, multi-asset endpoint                                           |
+| module-order        | Order placement, T+2 settlement date calculator (skips weekends), order reference generation (P-XXXXXX / timestamp format), cancellation |
+| module-portfolio    | Holdings query API                                                                                                                       |
+| module-plan         | Monthly investment plan CRUD + termination                                                                                               |
+| module-scheduler    | @Scheduled cron — daily 01:00 HKT plan execution, weekday 15:00 NAV simulation                                                           |
+| module-notification | SES email stub (logs in dev)                                                                                                             |
+| app                 | Flyway 13 migrations, 11 seed funds, JWT config, AWS config profiles                                                                     |
 
 ## Frontend (16 TypeScript files)
+
 - Auth: Login, Register pages
 - Home: SmartInvestHomePage with fund category cards
 - Funds: FundListPage (filter by type), FundDetailPage with NavChart + RiskGauge
@@ -143,6 +147,7 @@ scripts/           Deployment and utility scripts
 - Components: PageLayout, RiskGauge, NavChart
 
 ## Infrastructure (19 Terraform files)
+
 - VPC (public/private subnets, security groups)
 - IAM (EC2 role with SecretsManager, SES, CloudWatch policies)
 - EC2 (t3.small, systemd service, Nginx reverse proxy, user_data.sh)
@@ -150,12 +155,13 @@ scripts/           Deployment and utility scripts
 - S3+CloudFront (OAC, SPA 404 fallback, CloudFront cert)
 
 ## CI/CD
+
 - `.github/workflows/ci.yml` — Maven + npm + Terraform validate on PR
 - `.github/workflows/cd.yml` — JAR upload → SSM deploy, frontend sync → CloudFront invalidation
 
 ## Scripts
+
 - `scripts/deploy.sh` — full deploy pipeline
 - `scripts/seed-nav-history.py` — populate 5 years of NAV data
 - `scripts/create-demo-user.sh` — demo account + order
 - `scripts/cloudwatch-setup.sh` — CPU and RDS storage alarms
-

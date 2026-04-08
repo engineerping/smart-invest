@@ -109,7 +109,7 @@ smart-invest/
 - [ ] **Step 1: Verify tool versions**
 
 ```bash
-java --version    # must show openjdk 25
+java --version    # must show openjdk 21
 mvn --version     # must show 3.9+
 node --version    # must show v20
 docker --version  # any recent version
@@ -171,7 +171,7 @@ docker compose ps    # Expected: smart-invest-db   Up (healthy)
   <packaging>pom</packaging>
 
   <properties>
-    <java.version>25</java.version>
+    <java.version>21</java.version>
     <mapstruct.version>1.6.0</mapstruct.version>
   </properties>
 
@@ -3548,7 +3548,7 @@ jobs:
 
       - uses: actions/setup-java@v4
         with:
-          java-version: '25'
+          java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
 
@@ -3613,7 +3613,7 @@ jobs:
 
       - uses: actions/setup-java@v4
         with:
-          java-version: '25'
+          java-version: '21'
           distribution: 'temurin'
           cache: 'maven'
 
