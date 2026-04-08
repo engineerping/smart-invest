@@ -42,6 +42,7 @@ Developer (git push)
 ```
 
 **辅助 AWS 服务**（已在代码中集成）：
+
 - **AWS Secrets Manager**：存储 JWT secret 和数据库密码
 - **AWS SES**：发送邮件通知
 
@@ -122,10 +123,10 @@ AWS Console → EC2 → Security Groups → Create security group
 - Description: Smart Invest backend
 - Inbound rules（入站规则）：
 
-| Type  | Protocol | Port | Source    | 说明           |
-|-------|----------|------|-----------|----------------|
-| SSH   | TCP      | 22   | My IP     | 只允许你的 IP SSH |
-| Custom TCP | TCP | 8080 | 0.0.0.0/0 | CloudFront 转发后端请求 |
+| Type       | Protocol | Port | Source    | 说明                |
+| ---------- | -------- | ---- | --------- | ----------------- |
+| SSH        | TCP      | 22   | My IP     | 只允许你的 IP SSH      |
+| Custom TCP | TCP      | 8080 | 0.0.0.0/0 | CloudFront 转发后端请求 |
 
 > 安全建议：8080 理想情况只对 CloudFront IP 开放，但入门阶段先开 0.0.0.0/0 更简单。
 
@@ -371,18 +372,18 @@ VITE_API_BASE_URL=https://d1abc123xyz.cloudfront.net
 
 GitHub 仓库 → Settings → Secrets and variables → Actions → New repository secret
 
-| Secret 名称 | 值 |
-|------------|-----|
-| `AWS_ACCESS_KEY_ID` | IAM 用户的 Access Key ID |
-| `AWS_SECRET_ACCESS_KEY` | IAM 用户的 Secret Access Key |
-| `AWS_REGION` | `us-east-1` |
-| `ECR_REGISTRY` | `123456789.dkr.ecr.us-east-1.amazonaws.com` |
-| `S3_BUCKET` | `smart-invest-frontend-prod` |
-| `CF_DISTRIBUTION_ID` | CloudFront Distribution ID |
-| `EC2_HOST` | EC2 公网 IP（如 `54.12.34.56`） |
-| `EC2_SSH_KEY` | `smart-invest-key.pem` 的完整内容（cat 出来复制） |
-| `DB_PASSWORD` | 你设置的数据库密码 |
-| `JWT_SECRET` | 你设置的 JWT 密钥 |
+| Secret 名称               | 值                                           |
+| ----------------------- | ------------------------------------------- |
+| `AWS_ACCESS_KEY_ID`     | IAM 用户的 Access Key ID                       |
+| `AWS_SECRET_ACCESS_KEY` | IAM 用户的 Secret Access Key                   |
+| `AWS_REGION`            | `us-east-1`                                 |
+| `ECR_REGISTRY`          | `123456789.dkr.ecr.us-east-1.amazonaws.com` |
+| `S3_BUCKET`             | `smart-invest-frontend-prod`                |
+| `CF_DISTRIBUTION_ID`    | CloudFront Distribution ID                  |
+| `EC2_HOST`              | EC2 公网 IP（如 `54.12.34.56`）                  |
+| `EC2_SSH_KEY`           | `smart-invest-key.pem` 的完整内容（cat 出来复制）      |
+| `DB_PASSWORD`           | 你设置的数据库密码                                   |
+| `JWT_SECRET`            | 你设置的 JWT 密钥                                 |
 
 ### 10.2 前端 CI/CD
 
@@ -555,12 +556,14 @@ docker compose logs -f app
 ```
 
 后端验证：
+
 ```bash
 curl http://54.12.34.56:8080/actuator/health
 # 期望返回: {"status":"UP"}
 ```
 
 前端部署：
+
 ```bash
 # 本地执行
 cd frontend
@@ -577,14 +580,14 @@ aws cloudfront create-invalidation \
 
 ## 常见问题排查
 
-| 问题 | 排查方法 |
-|------|---------|
-| 后端 500 错误 | `docker compose logs app` 看 Spring Boot 日志 |
-| 数据库连接失败 | 检查 `.env` 里密码是否正确；`docker compose ps` 确认 postgres 在运行 |
-| 前端白屏 | 浏览器 Console 看错误；检查 `VITE_API_BASE_URL` 是否正确 |
-| CloudFront 返回 403 | 检查 S3 Bucket Policy 是否已更新为允许 OAC 访问 |
-| SSH 连接拒绝 | 检查 Security Group 的 22 端口是否对你的 IP 开放 |
-| GitHub Actions 失败 | 检查 Secrets 是否全部配置；查看 Actions 日志 |
+| 问题                | 排查方法                                                  |
+| ----------------- | ----------------------------------------------------- |
+| 后端 500 错误         | `docker compose logs app` 看 Spring Boot 日志            |
+| 数据库连接失败           | 检查 `.env` 里密码是否正确；`docker compose ps` 确认 postgres 在运行 |
+| 前端白屏              | 浏览器 Console 看错误；检查 `VITE_API_BASE_URL` 是否正确           |
+| CloudFront 返回 403 | 检查 S3 Bucket Policy 是否已更新为允许 OAC 访问                   |
+| SSH 连接拒绝          | 检查 Security Group 的 22 端口是否对你的 IP 开放                  |
+| GitHub Actions 失败 | 检查 Secrets 是否全部配置；查看 Actions 日志                       |
 
 ---
 
@@ -598,12 +601,12 @@ aws cloudfront create-invalidation \
 
 ## 架构总结
 
-| 组件 | AWS 服务 | 作用 |
-|------|---------|------|
-| 前端托管 | S3 | 存储 React 构建产物 |
-| CDN + HTTPS | CloudFront | 统一入口、HTTPS 终止、缓存 |
-| 后端运行时 | EC2 t3.micro | 运行 Spring Boot + PostgreSQL |
-| 镜像仓库 | ECR | 存储 Docker 镜像 |
-| 密钥管理 | Secrets Manager | 存储 DB密码、JWT密钥 |
-| 邮件服务 | SES | 发送通知邮件 |
-| CI/CD | GitHub Actions | 自动构建和部署 |
+| 组件          | AWS 服务          | 作用                          |
+| ----------- | --------------- | --------------------------- |
+| 前端托管        | S3              | 存储 React 构建产物               |
+| CDN + HTTPS | CloudFront      | 统一入口、HTTPS 终止、缓存            |
+| 后端运行时       | EC2 t3.micro    | 运行 Spring Boot + PostgreSQL |
+| 镜像仓库        | ECR             | 存储 Docker 镜像                |
+| 密钥管理        | Secrets Manager | 存储 DB密码、JWT密钥               |
+| 邮件服务        | SES             | 发送通知邮件                      |
+| CI/CD       | GitHub Actions  | 自动构建和部署                     |
