@@ -187,8 +187,6 @@ src/pages/
 
 - PLAN-20260115-001: HKD 1,000/month into SI-EI-01, 3 orders completed
 
- 
-
 ```bash
 cd frontend
 npm run dev

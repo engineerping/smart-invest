@@ -1,12 +1,10 @@
 # Smart Invest 项目构建总结
 
-
-
 ---
 
 ## 一、项目概览
 
-Smart Invest 是一个智能投资平台，基于 **Java 21 + Spring Boot 3.3** 后端和 **React 18 + TypeScript + Vite** 前端构建。出于将成本控制在200$ 以内的考虑，项目原型服务端采用多模块 Maven 的单体架构，实际开发时会升级成 micro-service 架构，通过 Flyway 管理数据库迁移，前端使用 Tailwind CSS 设计移动端 UI，采用 JWT（RS256）实现身份认证。
+Smart Invest 是一个投资平台，基于 **Java 21 + Spring Boot 3.3** 后端和 **React 18 + TypeScript + Vite** 前端构建。出于将成本控制在200$ 以内的考虑，项目原型服务端采用多模块 Maven 的单体架构，实际开发时会升级成 micro-service 架构，通过 Flyway 管理数据库迁移，前端使用 Tailwind CSS 设计移动端 UI，采用 JWT（RS256）实现身份认证。
 
 **技术栈：**
 
