@@ -26,106 +26,7 @@
 
 ## 1. 产品分析与功能范围
 
-### 1.1 核心业务实体
-
-以下内容从 Smart Invest 用户指南（共 26 页）完整提炼：
-
-| 实体                          | 关键字段                                                      | 来源页码      |
-| --------------------------- | --------------------------------------------------------- | --------- |
-| 用户（User）                    | email、password、full_name、risk_level（1–5）、status           | p.3, p.15 |
-| 基金（Fund）                    | code、name、type、NAV、risk_level、annual_fee、asset_allocation | p.7, p.12 |
-| 基金类型（Fund Type）             | MONEY_MARKET / BOND_INDEX / EQUITY_INDEX / MULTI_ASSET    | p.4, p.10 |
-| 持仓（Holding）                 | user_id、fund_id、total_units、avg_cost_nav、total_invested   | p.22      |
-| 订单（Order）                   | type、amount、reference_number、status、settlement_date       | p.9, p.14 |
-| 投资计划（Investment Plan）       | monthly_amount、next_contribution_date、completed_orders    | p.23      |
-| 自建组合（Portfolio Build）       | 已选基金列表 + 各基金分配比例（合计必须为 100%）                              | p.18      |
-| 参考资产配置（Reference Asset Mix） | 按风险等级推荐的各资产类别占比                                           | p.16      |
-
-### 1.2 三种投资路径
-
-**路径 A — 单只基金投资**（货币市场基金 / 债券指数基金 / 股票指数基金）
-
-```
-浏览基金列表（支持排序 + 筛选）
-  → 查看基金详情（NAV 走势图 / 持仓 / 风险等级标尺 / 费用）
-  → 点击"立即投资"
-  → 选择投资类型：月定投 或 一次性投资
-  → 输入金额（最低 100 HKD）+ 开始日期
-  → 选择投资账户 + 结算账户
-  → 信息确认页
-  → 阅读条款与条件 → 确认
-  → 买入确认页（展示订单参考号）
-```
-
-**路径 B — 多资产组合投资**
-
-```
-进入"多资产组合"
-  → 查看 5 个风险等级 Tab（每个 Tab 对应一只组合基金）
-  → 每个 Tab 展示：基金名称、近 6 个月回报率、资产配置饼图
-  → 点击"查看基金详情"了解完整信息
-  → 点击"立即投资"→ 进入与路径 A 相同的下单流程（最低 100 HKD）
-```
-
-**路径 C — 自建基金组合** *(仅限风险等级 4 或 5 的用户)*
-
-```
-进入"自建投资组合"
-  → 第 1/5 步：查看参考资产配置 → 选择基金（多选，支持筛选/排序）
-  → 第 2/5 步：分配比例（各基金占比合计必须恰好等于 100%）
-  → 第 3/5 步：投资详情（月定投/一次性，最低总金额 500 HKD，开始日期，账户）
-  → 第 4/5 步：逐只基金审核（每只基金提交后弹出通知）
-  → 第 5/5 步：买入确认页（每只基金各自显示订单参考号）
-```
-
-### 1.3 持仓与交易管理
-
-**我的持仓页面**
-
-- 总市值
-- 我的交易（带待处理笔数徽标）
-- 我的投资计划（带活跃笔数徽标）
-- 各基金持仓明细（含未实现盈亏）
-
-**我的交易页面**
-
-- 两个 Tab：订单（Orders） | 平台费用（Platform fees）
-- 订单按月份分组展示
-- 状态标识：待处理（橙色）/ 已取消（灰色）/ 已完成（绿色）
-- App 内历史记录：90 天；电子账单（eStatement）：24 个月
-
-**终止投资计划**（用户指南 p.23，共 4 步）
-
-1. 我的持仓 → 我的投资计划
-2. 选择活跃计划
-3. 点击"终止计划"
-4. 查看终止详情 → 确认
-
-**取消待处理订单**（用户指南 p.24，共 4 步）
-
-1. 我的持仓 → 我的交易
-2. 选择待处理订单
-3. 点击"取消订单"
-4. 查看详情 → 确认
-
-### 1.4 业务规则
-
-| 规则                  | 说明                                |
-| ------------------- | --------------------------------- |
-| 最低投资金额 — 单只基金       | 100 HKD                           |
-| 最低投资金额 — 自建组合       | 500 HKD（所有选中基金的合计总金额）             |
-| 自建组合功能访问权限          | 仅限风险等级 4（进取型）或 5（投机型）的用户          |
-| 组合分配比例              | 所有基金占比之和必须精确等于 100%               |
-| 最后一只基金金额计算方式        | 总金额 − 其余所有基金已分配金额（避免舍入误差）         |
-| 周末 / 节假日订单处理        | 顺延至下一个工作日处理                       |
-| 月定投扣款日规则            | 若扣款日为周末/节假日，顺延至当月下一个工作日           |
-| App 内交易记录保留期限       | 90 天                              |
-| eStatement 交易记录保留期限 | 24 个月                             |
-| 风险等级标签              | 1=保守型, 2=稳健型, 3=平衡型, 4=进取型, 5=投机型 |
-| 一次性订单参考号格式          | `P-XXXXXX`（P + 6 位数字）             |
-| 月定投订单参考号格式          | `YYYYMMDDHHmmssXXX`（时间戳 + 3 位后缀）  |
-
----
+详细内容请参阅：[产品分析与功能范围.md](./doc-manually/I.产品分析与功能范围.md)
 
 ## 2. 系统架构设计
 
@@ -351,62 +252,7 @@ sudo ln -s /usr/local/sessionmanagerplugin/bin/session-manager-plugin /usr/local
 
 ### 4.2 本地开发 Docker Compose 配置
 
-```yaml
-# docker-compose.yml（仓库根目录）
-# 用Kompose 可以将docker-compose.yml 转换成 K8s 的配置文件
-
-version: '3.9'
-services:
-
-  postgres:
-    image: postgres:16-alpine
-    container_name: smart-invest-db
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_DB: smartinvest
-      POSTGRES_USER: smartadmin
-      POSTGRES_PASSWORD: localdev_only
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U smartadmin -d smartinvest"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  app:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: smart-invest-app
-    ports:
-      - "8080:8080"
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/smartinvest
-      SPRING_DATASOURCE_USERNAME: smartadmin
-      SPRING_DATASOURCE_PASSWORD: localdev_only
-      JWT_SECRET: local-dev-secret-key-minimum-256-bits-long
-      APP_ENV: local
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.dev
-    container_name: smart-invest-frontend
-    ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend/src:/app/src   # 热重载
-    environment:
-      VITE_API_BASE_URL: http://localhost:8080
-
-volumes:
-  postgres_data:
-```
+> 文件：[docker-compose.yml](docker-compose.yml)
 
 ---
 
@@ -418,21 +264,27 @@ volumes:
 
 ### 5.2 迁移文件清单
 
+> 目录：[backend/app/src/main/resources/db/migration](backend/app/src/main/resources/db/migration)
+
 ```
-backend/src/main/resources/db/migration/
-├── V1__create_users.sql
-├── V2__create_risk_assessments.sql
-├── V3__create_funds.sql
-├── V4__create_fund_nav_history.sql
-├── V5__create_fund_asset_allocations.sql
-├── V6__create_fund_top_holdings.sql
-├── V7__create_fund_geo_allocations.sql
-├── V8__create_fund_sector_allocations.sql
-├── V9__create_reference_asset_mix.sql
-├── V10__create_orders.sql
-├── V11__create_investment_plans.sql
-├── V12__create_holdings.sql
-└── V13__seed_funds.sql
+backend/app/src/main/resources/db/migration/
+├── [V1__create_users.sql](backend/app/src/main/resources/db/migration/V1__create_users.sql)
+├── [V2__create_risk_assessments.sql](backend/app/src/main/resources/db/migration/V2__create_risk_assessments.sql)
+├── [V3__create_funds.sql](backend/app/src/main/resources/db/migration/V3__create_funds.sql)
+├── [V4__create_fund_nav_history.sql](backend/app/src/main/resources/db/migration/V4__create_fund_nav_history.sql)
+├── [V5__create_fund_asset_allocations.sql](backend/app/src/main/resources/db/migration/V5__create_fund_asset_allocations.sql)
+├── [V6__create_fund_top_holdings.sql](backend/app/src/main/resources/db/migration/V6__create_fund_top_holdings.sql)
+├── [V7__create_fund_geo_allocations.sql](backend/app/src/main/resources/db/migration/V7__create_fund_geo_allocations.sql)
+├── [V8__create_fund_sector_allocations.sql](backend/app/src/main/resources/db/migration/V8__create_fund_sector_allocations.sql)
+├── [V9__create_reference_asset_mix.sql](backend/app/src/main/resources/db/migration/V9__create_reference_asset_mix.sql)
+├── [V10__create_orders.sql](backend/app/src/main/resources/db/migration/V10__create_orders.sql)
+├── [V11__create_investment_plans.sql](backend/app/src/main/resources/db/migration/V11__create_investment_plans.sql)
+├── [V12__create_holdings.sql](backend/app/src/main/resources/db/migration/V12__create_holdings.sql)
+├── [V13__seed_funds.sql](backend/app/src/main/resources/db/migration/V13__seed_funds.sql)
+├── [V14__seed_demo_data.sql](backend/app/src/main/resources/db/migration/V14__seed_demo_data.sql)
+├── [V15__seed_nav_and_demo.sql](backend/app/src/main/resources/db/migration/V15__seed_nav_and_demo.sql)
+├── [V16__seed_nav_history.sql](backend/app/src/main/resources/db/migration/V16__seed_nav_history.sql)
+└── [V17__seed_fund_allocations.sql](backend/app/src/main/resources/db/migration/V17__seed_fund_allocations.sql)
 ```
 
 ### 5.3 DDL — 核心表定义
@@ -669,17 +521,15 @@ backend/
 
 ```xml
 <!-- backend/pom.xml -->
-
 ```
 
 ### 6.3 应用配置文件
 
 ```yaml
 # app/src/main/resources/application.yml
-
 ```
 
-### 6.4 module-user：API 接口清单
+### 6.4 module-user：API 接口清单 & 关键算法
 
 ```
 POST   /api/auth/register             注册新用户 → 返回 AuthResponse（含 tokens）
@@ -805,46 +655,7 @@ DELETE /api/plans/{id}                终止计划（停止后续扣款，不自
 
 ### 6.9 module-scheduler 定时任务
 
-```java
-@Component
-@Slf4j
-@RequiredArgsConstructor
-public class MonthlyInvestmentScheduler {
-
-    private final InvestmentPlanService planService;
-    private final OrderService orderService;
-
-    // 月定投执行任务 — 每天香港时间 01:00 触发
-    @Scheduled(cron = "0 0 1 * * *", zone = "Asia/Hong_Kong")
-    public void executeMonthlyPlans() {
-        LocalDate today = LocalDate.now(ZoneId.of("Asia/Hong_Kong"));
-
-        // 周末不执行
-        if (today.getDayOfWeek() == SATURDAY || today.getDayOfWeek() == SUNDAY) {
-            return;
-        }
-
-        List<InvestmentPlan> duePlans = planService.findPlansDueOn(today);
-        log.info("月定投执行：当日应处理 {} 笔计划，日期 {}", duePlans.size(), today);
-
-        for (InvestmentPlan plan : duePlans) {
-            try {
-                orderService.executePlan(plan);
-            } catch (Exception e) {
-                log.error("计划执行失败：planId={}，错误信息={}",
-                    plan.getId(), e.getMessage(), e);
-            }
-        }
-    }
-
-    // NAV 模拟更新任务 — 每周一至周五香港时间 15:00 触发
-    @Scheduled(cron = "0 0 15 * * MON-FRI", zone = "Asia/Hong_Kong")
-    public void simulateNavUpdate() {
-        log.info("NAV 模拟更新任务触发");
-        // 对每只基金 NAV 施加小幅随机波动（±0.5%），提升演示真实感
-    }
-}
-```
+> 类文件：[MonthlyInvestmentScheduler.java](backend/module-scheduler/src/main/java/com/smartinvest/scheduler/MonthlyInvestmentScheduler.java)
 
 ---
 
@@ -925,172 +736,21 @@ src/pages/
 
 **RiskGauge — 风险等级标尺**（还原用户指南 p.7、p.12 的双指示器色彩条）：
 
-```tsx
-// src/components/RiskGauge.tsx
-interface Props {
-  productRiskLevel: number;  // 产品风险等级（橙色 ▼ 显示在色条上方）
-  userRiskLevel: number;     // 用户风险承受等级（绿色 ▲ 显示在色条下方）
-}
-
-const SEGMENT_COLORS = ['#9CA3AF','#1E3A5F','#3B82F6','#EAB308','#F97316','#EF4444'];
-
-export const RiskGauge: React.FC<Props> = ({ productRiskLevel, userRiskLevel }) => (
-  <div className="w-full">
-    <div className="flex gap-0.5 relative mb-6">
-      {SEGMENT_COLORS.map((color, i) => (
-        <div key={i} className="flex-1 h-5 rounded-sm relative" style={{ backgroundColor: color }}>
-          {i === productRiskLevel && (
-            <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs">▼</span>
-          )}
-          {i === userRiskLevel && (
-            <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs text-green-600">▲</span>
-          )}
-        </div>
-      ))}
-    </div>
-    <div className="flex justify-between text-xs text-gray-500 mt-4">
-      <span>产品风险等级</span>
-      <span>您的风险承受水平</span>
-    </div>
-    <p className={`text-sm mt-3 flex items-center gap-1 ${productRiskLevel <= userRiskLevel ? 'text-green-600' : 'text-amber-600'}`}>
-      {productRiskLevel <= userRiskLevel
-        ? '✓ 本基金在您的风险承受范围内。'
-        : '⚠ 本基金风险等级超出您的风险承受水平。'}
-    </p>
-  </div>
-);
-```
+> 文件：[frontend/src/components/RiskGauge.tsx](frontend/src/components/RiskGauge.tsx)
 
 **NavChart — NAV 走势图**（支持 3M/6M/1Y/3Y/5Y 切换，对应用户指南 p.7、p.12）：
 
-```tsx
-// src/components/NavChart.tsx
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
-import { useQuery } from '@tanstack/react-query';
-
-const PERIODS = ['3M', '6M', '1Y', '3Y', '5Y'];
-
-export const NavChart: React.FC<{ fundId: string; chartLabel: string }> = ({ fundId, chartLabel }) => {
-  const [period, setPeriod] = useState('3M');
-  const { data = [] } = useQuery({
-    queryKey: ['nav-history', fundId, period],
-    queryFn: () => fundApi.getNavHistory(fundId, period),
-  });
-
-  // 将 NAV 转换为相对于起始日的百分比变化
-  const chartData = useMemo(() => {
-    if (!data.length) return [];
-    const base = data[0].nav;
-    return data.map(d => ({
-      date: d.navDate,
-      pct: +((( d.nav - base) / base) * 100).toFixed(2),
-    }));
-  }, [data]);
-
-  return (
-    <div className="w-full">
-      <p className="text-xs text-gray-500 mb-2">{chartLabel}</p>
-      <div className="flex gap-4 mb-3">
-        {PERIODS.map(p => (
-          <button key={p} onClick={() => setPeriod(p)}
-            className={`text-sm font-medium pb-1 ${period === p
-              ? 'text-red-600 border-b-2 border-red-600'
-              : 'text-gray-400'}`}>
-            {p}
-          </button>
-        ))}
-      </div>
-      <ResponsiveContainer width="100%" height={180}>
-        <LineChart data={chartData}>
-          <XAxis dataKey="date" tick={{ fontSize: 10 }} tickLine={false} />
-          <YAxis tick={{ fontSize: 10 }} tickFormatter={v => `${v}%`} width={45} />
-          <Tooltip formatter={v => [`${v}%`, '回报率']} />
-          <Line type="monotone" dataKey="pct" stroke="#3B82F6" dot={false} strokeWidth={1.5} />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-};
-```
+> 文件：[frontend/src/components/NavChart.tsx](frontend/src/components/NavChart.tsx)
 
 **AllocationForm — 组合分配比例输入**（合计必须精确等于 100%，对应用户指南 p.18）：
 
-```tsx
-// src/components/AllocationForm.tsx
-export const AllocationForm: React.FC = () => {
-  const { selectedFunds, setAllocations } = usePortfolioStore();
-  const [pcts, setPcts] = useState<Record<string, number>>(
-    Object.fromEntries(selectedFunds.map(f => [f.id, 0]))
-  );
-
-  const total = Object.values(pcts).reduce((s, v) => s + v, 0);
-  const valid = Math.abs(total - 100) < 0.01;  // 允许 0.01% 浮点误差
-
-  return (
-    <div className="px-4">
-      {selectedFunds.map(fund => (
-        <div key={fund.id} className="py-3 border-b">
-          <p className="text-sm font-medium">{fund.name}</p>
-          <p className="text-xs text-gray-500 mb-2">风险等级 {fund.riskLevel}</p>
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-600">基金分配比例</span>
-            <div className="flex items-center gap-1">
-              <input type="number" min={0} max={100}
-                value={pcts[fund.id] || ''}
-                onChange={e => setPcts(p => ({ ...p, [fund.id]: +e.target.value }))}
-                className="w-14 text-right border rounded px-2 py-1 text-sm" />
-              <span className="text-sm">%</span>
-            </div>
-          </div>
-        </div>
-      ))}
-      <p className={`text-right mt-3 font-medium text-sm ${valid ? 'text-green-600' : 'text-gray-400'}`}>
-        已分配 {total}%（目标 100%）
-      </p>
-      <button disabled={!valid} onClick={() => setAllocations(pcts)}
-        className={`w-full mt-4 py-3 rounded-lg font-semibold text-sm transition-colors ${
-          valid ? 'bg-red-600 text-white active:bg-red-700'
-                : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}>
-        继续
-      </button>
-    </div>
-  );
-};
-```
+> 文件：`frontend/src/components/AllocationForm.tsx`（待实现）
 
 ### 7.5 移动端优先 CSS 配置
 
-```js
-// tailwind.config.js
-export default {
-  content: ['./src/**/*.{ts,tsx}'],
-  theme: {
-    extend: {
-      colors: {
-        'si-red':    '#DB0011',   // Smart Invest 主操作色
-        'si-dark':   '#1A1A1A',
-        'si-gray':   '#6B7280',
-        'si-light':  '#F5F5F5',
-        'si-border': '#E5E7EB',
-      },
-      fontFamily: {
-        sans: ['"Univers Next"', '"Helvetica Neue"', 'sans-serif'],
-      },
-      screens: {
-        // 仅保留移动端断点
-        'sm': '390px',
-        'md': '430px',
-      },
-    },
-  },
-};
-```
+> 配置文件：[frontend/tailwind.config.js](frontend/tailwind.config.js)
 
-```html
-<!-- index.html — 强制移动端视口，禁止用户缩放 -->
-<meta name="viewport" content="width=device-width, initial-scale=1.0,
-      maximum-scale=1.0, user-scalable=no" />
-```
+> 入口文件：[frontend/index.html](frontend/index.html)
 
 ### 7.6 前端构建与部署至 S3 + CloudFront
 
@@ -1148,296 +808,22 @@ infrastructure/
 
 ### 8.2 VPC 模块
 
-```hcl
-# modules/vpc/main.tf
-resource "aws_vpc" "main" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-  tags = { Name = "smart-invest-vpc" }
-}
-
-resource "aws_subnet" "public" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "${var.region}a"
-  map_public_ip_on_launch = true
-  tags = { Name = "smart-invest-public-subnet" }
-}
-
-resource "aws_subnet" "private" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.2.0/24"
-  availability_zone = "${var.region}a"
-  tags = { Name = "smart-invest-private-subnet" }
-}
-
-resource "aws_internet_gateway" "igw" {
-  vpc_id = aws_vpc.main.id
-  tags   = { Name = "smart-invest-igw" }
-}
-
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.igw.id
-  }
-}
-
-resource "aws_route_table_association" "public" {
-  subnet_id      = aws_subnet.public.id
-  route_table_id = aws_route_table.public.id
-}
-
-# EC2 安全组
-resource "aws_security_group" "ec2" {
-  name   = "smart-invest-ec2-sg"
-  vpc_id = aws_vpc.main.id
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  ingress {
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = [var.admin_cidr]   # 限制仅管理员 IP 可访问
-  }
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-}
-
-# RDS 安全组（仅允许 EC2 访问）
-resource "aws_security_group" "rds" {
-  name   = "smart-invest-rds-sg"
-  vpc_id = aws_vpc.main.id
-
-  ingress {
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
-    security_groups = [aws_security_group.ec2.id]
-  }
-}
-```
+> 文件：[infrastructure/modules/vpc/main.tf](infrastructure/modules/vpc/main.tf)
 
 ### 8.3 EC2 模块
 
-```hcl
-# modules/ec2/main.tf
-resource "aws_instance" "app" {
-  ami                    = data.aws_ami.amazon_linux_2023.id
-  instance_type          = "t3.small"
-  subnet_id              = var.public_subnet_id
-  vpc_security_group_ids = [var.ec2_sg_id]
-  iam_instance_profile   = var.instance_profile_name
-  key_name               = var.key_pair_name
-
-  user_data = templatefile("${path.module}/user_data.sh", {
-    db_secret_arn = var.db_secret_arn
-    aws_region    = var.region
-    app_jar_s3    = var.app_jar_s3_path
-  })
-
-  root_block_device {
-    volume_type = "gp3"
-    volume_size = 20
-  }
-
-  tags = { Name = "smart-invest-app-server" }
-}
-
-# 弹性 IP（保证固定公网地址）
-resource "aws_eip" "app" {
-  instance = aws_instance.app.id
-  domain   = "vpc"
-  tags     = { Name = "smart-invest-eip" }
-}
-```
-
-```bash
-# modules/ec2/user_data.sh
-#!/bin/bash
-set -e
-
-# 安装运行依赖
-yum update -y
-yum install -y java-21-amazon-corretto-headless nginx
-
-# 从 S3 下载应用 JAR 包
-aws s3 cp ${app_jar_s3} /opt/smart-invest/app.jar
-
-# 从 Secrets Manager 获取数据库连接信息
-DB_SECRET=$(aws secretsmanager get-secret-value \
-  --secret-id ${db_secret_arn} \
-  --region ${aws_region} \
-  --query SecretString --output text)
-
-DB_URL=$(echo $DB_SECRET | python3 -c "import json,sys; s=json.load(sys.stdin); print(f\"jdbc:postgresql://{s['host']}:{s['port']}/{s['dbname']}\")")
-DB_USER=$(echo $DB_SECRET | python3 -c "import json,sys; s=json.load(sys.stdin); print(s['username'])")
-DB_PASS=$(echo $DB_SECRET | python3 -c "import json,sys; s=json.load(sys.stdin); print(s['password'])")
-
-# 创建 systemd 服务配置
-cat > /etc/systemd/system/smart-invest.service <<EOF
-[Unit]
-Description=Smart Invest Application
-After=network.target
-
-[Service]
-Type=simple
-User=ec2-user
-Environment="SPRING_DATASOURCE_URL=$DB_URL"
-Environment="SPRING_DATASOURCE_USERNAME=$DB_USER"
-Environment="SPRING_DATASOURCE_PASSWORD=$DB_PASS"
-Environment="AWS_REGION=${aws_region}"
-Environment="SPRING_PROFILES_ACTIVE=prod"
-ExecStart=/usr/bin/java -Xms256m -Xmx768m -jar /opt/smart-invest/app.jar
-Restart=on-failure
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# 配置 Nginx 反向代理（HTTPS）
-cat > /etc/nginx/conf.d/smart-invest.conf <<'EOF'
-server {
-    listen 443 ssl;
-    server_name _;
-
-    ssl_certificate     /etc/nginx/ssl/cert.pem;
-    ssl_certificate_key /etc/nginx/ssl/key.pem;
-
-    # API 请求转发至 Spring Boot
-    location /api/ {
-        proxy_pass         http://127.0.0.1:8080;
-        proxy_set_header   Host $host;
-        proxy_set_header   X-Real-IP $remote_addr;
-        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header   X-Forwarded-Proto $scheme;
-    }
-}
-EOF
-
-systemctl daemon-reload
-systemctl enable smart-invest
-systemctl start smart-invest
-systemctl enable nginx
-systemctl start nginx
-```
+> 配置文件：
+> 
+> - [infrastructure/modules/ec2/main.tf](infrastructure/modules/ec2/main.tf)
+> - [infrastructure/modules/ec2/user_data.sh](infrastructure/modules/ec2/user_data.sh)
 
 ### 8.4 RDS 模块
 
-```hcl
-# modules/rds/main.tf
-resource "aws_db_subnet_group" "main" {
-  name       = "smart-invest-db-subnet-group"
-  subnet_ids = var.subnet_ids
-}
-
-resource "aws_db_instance" "postgres" {
-  identifier           = "smart-invest-db"
-  engine               = "postgres"
-  engine_version       = "16.3"
-  instance_class       = "db.t3.micro"
-  allocated_storage    = 20
-  storage_type         = "gp2"
-  db_name              = "smartinvest"
-  username             = "smartadmin"
-  manage_master_user_password = true   # 密码托管至 Secrets Manager
-
-  db_subnet_group_name   = aws_db_subnet_group.main.name
-  vpc_security_group_ids = [var.rds_sg_id]
-
-  backup_retention_period = 7           # 自动备份保留 7 天
-  backup_window           = "03:00-04:00"
-  maintenance_window      = "sun:04:00-sun:05:00"
-
-  multi_az               = false
-  publicly_accessible    = false
-  deletion_protection    = false
-  skip_final_snapshot    = false
-  final_snapshot_identifier = "smart-invest-db-final-snapshot"
-
-  tags = { Name = "smart-invest-postgres" }
-}
-```
+> 文件：[infrastructure/modules/rds/main.tf](infrastructure/modules/rds/main.tf)
 
 ### 8.5 S3 + CloudFront 模块
 
-```hcl
-# modules/s3-cloudfront/main.tf
-resource "aws_s3_bucket" "frontend" {
-  bucket = "smart-invest-frontend-${var.account_id}"
-}
-
-resource "aws_s3_bucket_public_access_block" "frontend" {
-  bucket                  = aws_s3_bucket.frontend.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_cloudfront_origin_access_control" "oac" {
-  name                              = "smart-invest-oac"
-  origin_access_control_origin_type = "s3"
-  signing_behavior                  = "always"
-  signing_protocol                  = "sigv4"
-}
-
-resource "aws_cloudfront_distribution" "frontend" {
-  enabled             = true
-  default_root_object = "index.html"
-  price_class         = "PriceClass_100"   # 美国/欧洲/亚洲 — 最低成本等级
-
-  origin {
-    domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
-    origin_id                = "S3-smart-invest-frontend"
-    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
-  }
-
-  default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "S3-smart-invest-frontend"
-    viewer_protocol_policy = "redirect-to-https"
-    compress               = true
-
-    forwarded_values {
-      query_string = false
-      cookies { forward = "none" }
-    }
-
-    min_ttl     = 0
-    default_ttl = 86400
-    max_ttl     = 31536000
-  }
-
-  # SPA 降级处理 — 所有 404 → index.html（由 React Router 处理路由）
-  custom_error_response {
-    error_code         = 404
-    response_code      = 200
-    response_page_path = "/index.html"
-  }
-
-  restrictions {
-    geo_restriction { restriction_type = "none" }
-  }
-
-  viewer_certificate {
-    cloudfront_default_certificate = true
-  }
-}
-```
+> 文件：[infrastructure/modules/s3-cloudfront/main.tf](infrastructure/modules/s3-cloudfront/main.tf)
 
 ### 8.6 基础设施部署执行顺序
 
@@ -1479,182 +865,11 @@ aws cloudfront create-invalidation --distribution-id <CF_ID> --paths "/*"
 
 ### 9.1 CI — Pull Request 检查
 
-```yaml
-# .github/workflows/ci.yml
-name: CI
-
-on:
-  pull_request:
-    branches: [main, develop]
-
-jobs:
-  backend:
-    name: 后端构建与测试
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 安装 Java 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: 'maven'
-
-      - name: 构建并执行测试
-        run: mvn -B clean verify --file backend/pom.xml
-
-      - name: 上传测试报告
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: surefire-reports
-          path: backend/**/target/surefire-reports/
-
-  frontend:
-    name: 前端构建与代码规范检查
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 安装 Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: 安装依赖
-        working-directory: frontend
-        run: npm ci
-
-      - name: TypeScript 类型检查
-        working-directory: frontend
-        run: npm run type-check
-
-      - name: ESLint 代码规范检查
-        working-directory: frontend
-        run: npm run lint
-
-      - name: 构建
-        working-directory: frontend
-        run: npm run build
-
-  terraform-validate:
-    name: Terraform 配置校验
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.x
-      - run: terraform -chdir=infrastructure init -backend=false
-      - run: terraform -chdir=infrastructure validate
-```
+> 文件：[.github/workflows/ci.yml](.github/workflows/ci.yml)
 
 ### 9.2 CD — 合并至 main 分支后自动部署
 
-```yaml
-# .github/workflows/cd.yml
-name: CD
-
-on:
-  push:
-    branches: [main]
-
-env:
-  AWS_REGION: us-east-1
-
-jobs:
-  deploy-backend:
-    name: 后端部署至 EC2
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 安装 Java 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: 'maven'
-
-      - name: 打包 JAR
-        run: mvn -B clean package -DskipTests --file backend/pom.xml
-
-      - name: 配置 AWS 凭证
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ env.AWS_REGION }}
-
-      - name: 上传 JAR 至 S3
-        run: |
-          aws s3 cp backend/app/target/smart-invest-app.jar \
-            s3://${{ secrets.ARTIFACT_BUCKET }}/smart-invest-app-${{ github.sha }}.jar
-          # 同时更新 latest 版本指针
-          aws s3 cp backend/app/target/smart-invest-app.jar \
-            s3://${{ secrets.ARTIFACT_BUCKET }}/smart-invest-app.jar
-
-      - name: 通过 SSM 在 EC2 上执行部署
-        run: |
-          aws ssm send-command \
-            --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \
-            --document-name "AWS-RunShellScript" \
-            --parameters '{
-              "commands": [
-                "aws s3 cp s3://${{ secrets.ARTIFACT_BUCKET }}/smart-invest-app.jar /opt/smart-invest/app.jar",
-                "sudo systemctl restart smart-invest",
-                "sleep 15",
-                "sudo systemctl is-active smart-invest"
-              ]
-            }' \
-            --output text
-
-  deploy-frontend:
-    name: 前端部署至 S3 + CloudFront
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 安装 Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: 构建
-        working-directory: frontend
-        env:
-          VITE_API_BASE_URL: ${{ secrets.API_BASE_URL }}
-        run: |
-          npm ci
-          npm run build
-
-      - name: 配置 AWS 凭证
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region:            ${{ env.AWS_REGION }}
-
-      - name: 同步至 S3
-        working-directory: frontend
-        run: |
-          aws s3 sync dist/ s3://${{ secrets.FRONTEND_BUCKET }}/ \
-            --delete \
-            --cache-control "public, max-age=31536000, immutable"
-          aws s3 cp dist/index.html s3://${{ secrets.FRONTEND_BUCKET }}/index.html \
-            --cache-control "no-cache"
-
-      - name: 使 CloudFront 缓存失效
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CF_DISTRIBUTION_ID }} \
-            --paths "/*"
-```
+> 文件：[.github/workflows/cd.yml](.github/workflows/cd.yml)
 
 ---
 

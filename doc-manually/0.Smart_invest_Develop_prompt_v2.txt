@@ -1,0 +1,19 @@
+背景：以前工作中我作为架构师带领了由若干个人组成的小团队，开发了一个软件，我要现在要找工作，想把这个软件复现一下，部署在 AWS 上，把项目的访问域名 和 github 地址展示在自己的简历中。 
+
+目标：我要用 Claude code 开发一个生产级的大型软件，我有产品的功能设计文档 Smart Invest User Guide_en-US.pdf。
+
+前端界面前端要求: 注意这个软件的前端只有 mobile，所以要做到当我在 chrome  的 developer tool中切换到mobile 界面时，前端界面满足 Smart Invest User Guide_en-US.pdf中的要求；
+
+后端服务要求: 应用 AWS aws well-architected framework 和 spring 生态，满足Smart Invest User Guide_en-US.pdf中的要求;
+
+数据库要求： 满足Smart Invest User Guide_en-US.pdf中的要求及其他你认为应当满足的要求。
+可以使用哪些 AWS 服务：请查看附件 AWSNewUser拥有200USD积分所能使用的服务.txt 
+
+其中会用到 Java 21 ，出于成本考虑就不用 EKS 了，非生产环境暂时EC2好了。
+
+
+附件 Smart Invest User Guide_en-US.pdf 是 Invest的功能设计文档.另外我复现的这个项目，为避免不必要的麻烦，不要使用 Flex Invest，而应当处处使用 Smart  Invest ，github 仓库已经创建好了，地址是https://github.com/engineerping/Smart -invest。
+
+你已经以团队管理人员兼架构师兼全栈开发人员的视角，设计好了ProjectRoadmap, 见附件：Smart Invest_ProjectRoadmap_v3.md；
+
+claude code 可以使用 /writting-plans skill 在 Smart Invest_ProjectRoadmap_v3.md 的基础上，再写一版更详细的 markdown 文档（包括英文版和中文版）

@@ -14,7 +14,7 @@ aws logs create-log-group --log-group-name /smart-invest/application --region $R
 # EC2 ID
 EC2_ID=$(cd infrastructure && terraform output -raw instance_id)
 
-# CPU Alarm
+# Create Alarm: EC2 CPU Usage Exceeds 80% for 10 Consecutive Minutes
 aws cloudwatch put-metric-alarm \
   --alarm-name "SmartInvest-CPU-High" \
   --metric-name CPUUtilization \
@@ -26,7 +26,7 @@ aws cloudwatch put-metric-alarm \
   --alarm-actions ${SNS_ARN} \
   --region $REGION
 
-# RDS Free Storage Alarm
+# Create Alarm: RDS Free Storage Space Below Threshold
 aws cloudwatch put-metric-alarm \
   --alarm-name "SmartInvest-RDS-Storage-Low" \
   --metric-name FreeStorageSpace \
@@ -36,6 +36,19 @@ aws cloudwatch put-metric-alarm \
   --comparison-operator LessThanThreshold \
   --evaluation-periods 1 \
   --alarm-actions ${SNS_ARN} \
+  --region $REGION
+
+# Create Alarm: More Than 10 5xx Errors Within 5 Minutes
+aws cloudwatch put-metric-alarm \
+  --alarm-name "SmartInvest-5xx-Rate" \
+  --metric-name "5XXError" \
+  --namespace "AWS/ApiGateway" \
+  --statistic Sum \
+  --period 300 \
+  --threshold 10 \
+  --comparison-operator GreaterThanThreshold \
+  --evaluation-periods 1 \
+  --alarm-actions $SNS_TOPIC_ARN \
   --region $REGION
 
 echo "CloudWatch alarms created."
