@@ -1,9 +1,35 @@
-# Smart Invest — 项目开发路线图
+<div align="center">
 
-**代码仓库**：`smart-invest`  
-**版本**：3.0  
-**技术栈**：Java 21 · Spring Boot 3.3 · React 18（移动端 Web）· AWS EC2 · PostgreSQL · Terraform  
-**参考文档**：Smart Invest 用户指南（基于 Smart Invest User Guide 改编）
+# Smart Invest
+
+[![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![React](https://img.shields.io/badge/React-18-20232A?logo=react&logoColor=61DAFB)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![AWS](https://img.shields.io/badge/AWS-EC2_·_RDS_·_S3-FF9900?logo=amazonaws&logoColor=white)](https://aws.amazon.com/)
+[![Terraform](https://img.shields.io/badge/Terraform-1.9+-7B42BC?logo=terraform&logoColor=white)](https://www.terraform.io/)
+
+**[English](./README.md) · [简体中文](./README.zh-CN.md)**
+
+</div>
+
+---
+
+## 项目简介
+
+Smart Invest 是一款**小成本投资平台**，通过这软件，银行将诸多用户的小额资金汇集到一起，用这些资金购买只有大量资金人才有资格购买的高质量基金，然后将利润分配给用户。——本软件以真实银行投资 App 为原型设计。
+
+**核心功能：**
+
+- 浏览并投资货币市场基金、债券指数基金、股票指数基金及多元资产组合
+- 基于风险评估构建个性化投资组合
+- 设置月度定期定额（DCA）投资计划，自动执行
+- 实时查看持仓及未实现盈亏
+
+---
+
+**架构方案：** 在 AWS 上部署的模块化单体架构，遵循 [AWS Well-Architected Framework](https://aws.amazon.com/architecture/well-architected/) 五大支柱——针对 `$200` 积分预算进行成本优化（月均约 $34，可持续运行约 5–6 个月）。
 
 ---
 
@@ -1039,4 +1065,4 @@ smart-invest/
 
 ---
 
-*本文档作为 `smart-invest` 仓库的组成部分进行版本管理。所有基础设施配置与应用代码均纳入版本控制。各模块的具体实现细节请参阅对应子目录的 README 文件。*
+*本文档作为 `smart-invest` 仓库的组成部分进行版本管理。所有基础设施配置与应用代码均纳入版本控制。各模块的具体实现细节请直接参阅代码仓库中的对应文件。*

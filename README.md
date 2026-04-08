@@ -1,9 +1,35 @@
-# Smart Invest — Project Development Roadmap
+<div align="center">
 
-**Repository**: `smart-invest`  
-**Version**: 3.0  
-**Tech Stack**: Java 21 · Spring Boot 3.3 · React 18 (Mobile Web) · AWS EC2 · PostgreSQL · Terraform  
-**Reference Document**: Smart Invest User Guide (adapted from SmartInvestInvest User Guide)
+# Smart Invest
+
+
+[![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
+[![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
+[![React](https://img.shields.io/badge/React-18-20232A?logo=react&logoColor=61DAFB)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![AWS](https://img.shields.io/badge/AWS-EC2_·_RDS_·_S3-FF9900?logo=amazonaws&logoColor=white)](https://aws.amazon.com/)
+[![Terraform](https://img.shields.io/badge/Terraform-1.9+-7B42BC?logo=terraform&logoColor=white)](https://www.terraform.io/)
+
+**[English](./README.md) · [简体中文](./README.zh-CN.md)**
+
+</div>
+
+---
+
+## Overview
+
+Smart Invest is a **Low-cost investment platform** through which, Banks pool small amounts of money from many users, use these funds to buy high-quality funds that only those with large sums of money are eligible to purchase, and then distribute the profits to the users. — modelled after a real-world bank investment app.
+
+**What users can do:**
+
+- Browse and invest in money market, bond index, equity index, and multi-asset funds
+- Build custom portfolios with risk-matched fund allocation
+- Set up automated monthly investment plans
+- Track holdings with real-time unrealised P&L
+---
+
+**Architecture:** Modular Monolith on AWS following the [Well-Architected Framework](https://aws.amazon.com/architecture/well-architected/) — cost-optimised for a `$200` credit budget (~5–6 months of live operation at ~$34/month).
 
 ---
 
@@ -795,6 +821,7 @@ infrastructure/
 ### 8.3 EC2 Module
 
 > Files:
+> 
 > - [infrastructure/modules/ec2/main.tf](infrastructure/modules/ec2/main.tf)
 > - [infrastructure/modules/ec2/user_data.sh](infrastructure/modules/ec2/user_data.sh)
 
@@ -1021,4 +1048,4 @@ smart-invest/
 
 ---
 
-*Document maintained as part of the `smart-invest` repository. All infrastructure and application code is version-controlled. Refer to individual module READMEs for implementation details.*
+*Document maintained as part of the `smart-invest` repository. All infrastructure and application code is version-controlled. Refer to the code in the repository for implementation details.*
