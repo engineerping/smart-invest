@@ -1,6 +1,7 @@
 package com.smartinvest.portfolio.service;
 
 import com.smartinvest.fund.repository.FundNavHistoryRepository;
+import com.smartinvest.fund.repository.FundRepository;
 import com.smartinvest.portfolio.domain.Holding;
 import com.smartinvest.portfolio.dto.HoldingResponse;
 import com.smartinvest.portfolio.repository.HoldingRepository;
@@ -16,6 +17,7 @@ import java.util.UUID;
 public class PortfolioService {
     private final HoldingRepository holdingRepository;
     private final FundNavHistoryRepository fundNavHistoryRepository;
+    private final FundRepository fundRepository;
 
     public List<HoldingResponse> getHoldingsWithMarketValue(UUID userId) {
         return holdingRepository.findByUserId(userId).stream()
@@ -34,6 +36,8 @@ public class PortfolioService {
             .findTopByFundIdOrderByNavDateDesc(h.getFundId())
             .map(nav -> h.getTotalUnits().multiply(nav.getNav()).setScale(2, RoundingMode.HALF_UP))
             .orElse(h.getTotalInvested());
-        return new HoldingResponse(h.getId(), h.getFundId(), h.getTotalUnits(), h.getTotalInvested(), marketValue);
+        return fundRepository.findById(h.getFundId())
+            .map(f -> new HoldingResponse(h.getId(), h.getFundId(), f.getName(), f.getCode(), h.getTotalUnits(), h.getTotalInvested(), marketValue))
+            .orElse(new HoldingResponse(h.getId(), h.getFundId(), null, null, h.getTotalUnits(), h.getTotalInvested(), marketValue));
     }
 }

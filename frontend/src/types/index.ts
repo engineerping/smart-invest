@@ -25,7 +25,7 @@ export interface Holding {
 }
 
 export interface InvestmentPlan {
-  id: string; referenceNumber: string; fundId: string;
+  id: string; referenceNumber: string; fundId: string; fundName?: string;
   monthlyAmount: number; nextContributionDate: string;
   status: string; completedOrders: number; totalInvested: number;
 }

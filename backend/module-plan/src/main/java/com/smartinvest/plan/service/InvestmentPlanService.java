@@ -3,6 +3,7 @@ package com.smartinvest.plan.service;
 import com.smartinvest.plan.domain.InvestmentPlan;
 import com.smartinvest.plan.dto.CreatePlanRequest;
 import com.smartinvest.plan.repository.InvestmentPlanRepository;
+import com.smartinvest.fund.repository.FundRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import java.time.*;
@@ -11,6 +12,7 @@ import java.util.*;
 @Service @RequiredArgsConstructor
 public class InvestmentPlanService {
     private final InvestmentPlanRepository planRepository;
+    private final FundRepository fundRepository;
 
     private String generateRef() {
         return "PLAN-" + System.currentTimeMillis();
@@ -29,13 +31,21 @@ public class InvestmentPlanService {
     }
 
     public List<InvestmentPlan> getActivePlans(UUID userId) {
-        return planRepository.findByUserIdAndStatus(userId, "ACTIVE");
+        List<InvestmentPlan> plans = planRepository.findByUserIdAndStatus(userId, "ACTIVE");
+        for (InvestmentPlan plan : plans) {
+            fundRepository.findById(plan.getFundId())
+                .ifPresent(f -> plan.setFundName(f.getName()));
+        }
+        return plans;
     }
 
     public InvestmentPlan getPlan(UUID planId, UUID userId) {
-        return planRepository.findById(planId)
+        InvestmentPlan plan = planRepository.findById(planId)
             .filter(p -> p.getUserId().equals(userId))
             .orElseThrow(() -> new NoSuchElementException("Plan not found"));
+        fundRepository.findById(plan.getFundId())
+            .ifPresent(f -> plan.setFundName(f.getName()));
+        return plan;
     }
 
     public void terminatePlan(UUID planId, UUID userId) {

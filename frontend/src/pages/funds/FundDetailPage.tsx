@@ -8,6 +8,8 @@ import NavChart from '../../components/NavChart';
 
 const TABS = ['Overview', 'Holdings', 'Risk'];
 
+interface TopHolding { holdingName: string; weight: number; }
+
 export default function FundDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [tab, setTab] = useState('Overview');
@@ -16,6 +18,12 @@ export default function FundDetailPage() {
   const { data: fund } = useQuery({
     queryKey: ['fund', id],
     queryFn: () => apiClient.get(`/api/funds/${id}`).then(r => r.data),
+    enabled: !!id,
+  });
+
+  const { data: topHoldings = [] } = useQuery<TopHolding[]>({
+    queryKey: ['fund', id, 'top-holdings'],
+    queryFn: () => apiClient.get(`/api/funds/${id}/top-holdings`).then(r => r.data),
     enabled: !!id,
   });
 
@@ -63,7 +71,20 @@ export default function FundDetailPage() {
       {tab === 'Risk' && <RiskGauge productRiskLevel={fund.riskLevel} userRiskLevel={3} />}
 
       {tab === 'Holdings' && (
-        <div className="px-4 py-4 text-sm text-si-gray">Holdings data not yet available for this fund.</div>
+        <div className="px-4 py-4">
+          {topHoldings.length === 0 ? (
+            <p className="text-sm text-si-gray text-center py-8">No holdings data available</p>
+          ) : (
+            <div className="space-y-2">
+              {topHoldings.map((h, i) => (
+                <div key={i} className="flex justify-between items-center py-2 border-b border-si-border last:border-0">
+                  <span className="text-sm text-si-dark">{h.holdingName}</span>
+                  <span className="text-sm font-medium text-si-dark">{h.weight?.toFixed(2)}%</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       )}
 
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] p-4 bg-white border-t border-si-border">

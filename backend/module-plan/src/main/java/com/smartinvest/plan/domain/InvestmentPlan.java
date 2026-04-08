@@ -14,6 +14,7 @@ public class InvestmentPlan {
     @Column(name = "reference_number", unique = true, nullable = false) String referenceNumber;
     @Column(name = "user_id", nullable = false) UUID userId;
     @Column(name = "fund_id", nullable = false) UUID fundId;
+    @Transient String fundName;
     @Column(name = "monthly_amount", nullable = false) BigDecimal monthlyAmount;
     @Column(name = "next_contribution_date", nullable = false) LocalDate nextContributionDate;
     @Column(name = "investment_account") String investmentAccount;

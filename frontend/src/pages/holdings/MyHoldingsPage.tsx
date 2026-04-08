@@ -6,6 +6,8 @@ import PageLayout from '../../components/PageLayout';
 interface HoldingResponse {
   id: string;
   fundId: string;
+  fundName: string | null;
+  fundCode: string | null;
   totalUnits: number;
   totalInvested: number;
   marketValue: number;
@@ -54,7 +56,8 @@ export default function MyHoldingsPage() {
           <div className="space-y-3">
             {holdings.map(h => (
               <div key={h.id} className="border border-si-border rounded-xl p-4">
-                <p className="text-sm font-medium text-si-dark">{h.fundId}</p>
+                <p className="text-sm font-medium text-si-dark">{h.fundName ?? 'Unknown Fund'}</p>
+                <p className="text-xs text-si-gray">{h.fundCode}</p>
                 <div className="flex justify-between mt-2 text-xs text-si-gray">
                   <span>Units: {h.totalUnits}</span>
                   <span>Market Value: HKD {h.marketValue.toFixed(2)}</span>

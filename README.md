@@ -51,21 +51,28 @@ docker compose up -d postgres;      # Start
 docker compose down;                # Stop
 
 # === Backend ===
-# Start (http://localhost:8080)
+# Start: (http://localhost:8080)
 cd backend && mvn install -DskipTests && cd app && mvn spring-boot:run -Dspring-boot.run.profiles=local 2>&1 | tail -40;
-# Kill the Maven process or Ctrl+C
+
+# Note: `mvn install` is needed first because the multi-module project requires sub-modules (domain, infrastructure, etc.)
+# to be installed into the local Maven repo before `app` can resolve them. `spring-boot:run` is preferred over
+# `java -jar` in dev because it skips packaging, supports hot reload, and includes unpackaged resources automatically.
+
+# === Populate data into DB ===
+## When starting Spring Boot — Flyway will automatically detect and execute the SQL file in backend/app/src/main/resources/db.
+
+# Stop: kill the Maven process， or Ctrl+C
 kill $(lsof -ti :8080) && echo "Backend server stopped"
 
 # === Frontend ===
 cd frontend; npm run dev;              # Start (http://localhost:5173)
-lsof -ti:5173 | xargs kill;   # Stop
+lsof -ti:5173 | xargs kill;            # Stop
 
-# === Seed Data ===
-# 1. Create demo user + order
-./scripts/create-demo-user.sh;
+# === Use ===
+# 1. Login with demo account 
+demo@smartinvest.com
+password:Demo1234!
 
-# 2. Seed NAV history (5 years of daily data)
-python3 ./scripts/seed-nav-history.py;
 ```
 
 ### Deploy to AWS

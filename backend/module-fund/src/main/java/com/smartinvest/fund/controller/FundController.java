@@ -42,4 +42,19 @@ public class FundController {
     public ResponseEntity<List<FundAssetAllocation>> assetAllocation(@PathVariable UUID id) {
         return ResponseEntity.ok(fundService.getAssetAllocation(id));
     }
+
+    @GetMapping("/{id}/top-holdings")
+    public ResponseEntity<List<FundTopHolding>> topHoldings(@PathVariable UUID id) {
+        return ResponseEntity.ok(fundService.getTopHoldings(id));
+    }
+
+    @GetMapping("/{id}/sector-allocation")
+    public ResponseEntity<List<FundSectorAllocation>> sectorAllocation(@PathVariable UUID id) {
+        return ResponseEntity.ok(fundService.getSectorAllocation(id));
+    }
+
+    @GetMapping("/{id}/geo-allocation")
+    public ResponseEntity<List<FundGeoAllocation>> geoAllocation(@PathVariable UUID id) {
+        return ResponseEntity.ok(fundService.getGeoAllocation(id));
+    }
 }

@@ -12,6 +12,9 @@ public class FundService {
     private final FundRepository fundRepository;
     private final FundNavHistoryRepository navHistoryRepository;
     private final FundAssetAllocationRepository assetAllocationRepository;
+    private final FundTopHoldingRepository topHoldingRepository;
+    private final FundSectorAllocationRepository sectorAllocationRepository;
+    private final FundGeoAllocationRepository geoAllocationRepository;
 
     public List<Fund> getAllFunds(String type, Short riskLevel) {
         List<Fund> funds;
@@ -48,5 +51,17 @@ public class FundService {
 
     public List<FundAssetAllocation> getAssetAllocation(UUID fundId) {
         return assetAllocationRepository.findByFundIdOrderByAssetClass(fundId);
+    }
+
+    public List<FundTopHolding> getTopHoldings(UUID fundId) {
+        return topHoldingRepository.findByFundIdOrderBySequence(fundId);
+    }
+
+    public List<FundSectorAllocation> getSectorAllocation(UUID fundId) {
+        return sectorAllocationRepository.findByFundIdOrderBySector(fundId);
+    }
+
+    public List<FundGeoAllocation> getGeoAllocation(UUID fundId) {
+        return geoAllocationRepository.findByFundIdOrderByRegion(fundId);
     }
 }
