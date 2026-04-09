@@ -53,7 +53,7 @@ Developer (git push)
 ### 1.1 创建 IAM 用户（不要用 root 账号操作）
 
 1. 登录 AWS Console → 搜索 **IAM** → Users → Create user
-2. 用户名：`smart-invest-deploy`
+2. 用户名：`smart-invest-deploy-user`
 3. 勾选 **Provide user access to the AWS Management Console**（可选）
 4. Permissions：选 **Add user to group**，选择 Create group 以创建用户组。
 5. User group name 填 smart-invest-deploy-group，
@@ -66,10 +66,11 @@ Developer (git push)
    - `SecretsManagerReadWrite`
    - `AmazonSESFullAccess`
   最后点击 Create user group
-6. 回到create user界面，在user groups中勾选刚才创建的 smart-investment-deploy-group,点击 Next
-
-5. 创建完成后点击 Return tousers list → **Security credentials** → **Create access key**
-6. 选 **Application running outside AWS** → 下载 CSV（只有这一次机会！）
+6. 回到create user界面，在user groups中勾选刚才创建的 smart-investment-deploy-group, 
+   将 smart-invest-deploy-user 添加入 smart-investment-deploy-group 这个用户组，点击 Next
+7. 创建完成后点击 Return tousers list, 回到 IAM > Users 页面
+8. 点击刚才创建的 smart-invest-deploy-user 用户，进入用户详情页→ **Create access key**
+6. 选 **Application running outside AWS** → 点击 Create access Key,下载 CSV（只有这一次机会！）
 
 > **重要**：把 Access Key ID 和 Secret Access Key 保存好，后面 GitHub Actions 要用。
 

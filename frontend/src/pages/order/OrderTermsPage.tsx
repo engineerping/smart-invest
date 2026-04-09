@@ -1,33 +1,35 @@
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
 import PageLayout from '../../components/PageLayout';
 
 export default function OrderTermsPage() {
   const { state } = useLocation();
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const handleConfirm = async () => {
     try {
       const res = await apiClient.post('/api/orders', state);
       navigate('/order/success', { state: { order: res.data } });
     } catch {
-      alert('Order placement failed. Please try again.');
+      alert(t('orderTerms_error'));
     }
   };
 
   return (
-    <PageLayout title="Terms & Conditions" showBack>
+    <PageLayout title={t('orderTerms_title')} showBack>
       <div className="px-4 py-4 text-xs text-si-gray space-y-3 leading-relaxed">
-        <p>This investment involves risk. Past performance is not indicative of future results.</p>
-        <p>By confirming, you acknowledge that you have read and understood the fund prospectus and key facts statement.</p>
-        <p>Investment returns are not guaranteed. The value of investments and any income from them can fall as well as rise.</p>
-        <p>Smart Invest is a demonstration platform for portfolio purposes only.</p>
+        <p>{t('orderTerms_p1')}</p>
+        <p>{t('orderTerms_p2')}</p>
+        <p>{t('orderTerms_p3')}</p>
+        <p>{t('orderTerms_p4')}</p>
       </div>
 
       <div className="px-4 pt-2">
         <button onClick={handleConfirm}
           className="w-full bg-si-red text-white rounded-lg py-3 font-semibold text-sm">
-          Confirm &amp; Buy
+          {t('orderTerms_confirm')}
         </button>
       </div>
     </PageLayout>

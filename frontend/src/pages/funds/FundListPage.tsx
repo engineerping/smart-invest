@@ -1,5 +1,6 @@
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
 import PageLayout from '../../components/PageLayout';
 import type { Fund } from '../../types';
@@ -10,6 +11,7 @@ export default function FundListPage() {
   const [params] = useSearchParams();
   const type = params.get('type') ?? undefined;
   const navigate = useNavigate();
+  const { t } = useTranslation();
 
   const { data: funds = [], isLoading } = useQuery({
     queryKey: ['funds', type],
@@ -17,9 +19,9 @@ export default function FundListPage() {
   });
 
   return (
-    <PageLayout title="Funds" showBack>
+    <PageLayout title={t('fundList_title')} showBack>
       {isLoading ? (
-        <div className="flex justify-center py-10 text-si-gray text-sm">Loading…</div>
+        <div className="flex justify-center py-10 text-si-gray text-sm">{t('loading')}</div>
       ) : (
         <div className="divide-y divide-si-border">
           {funds.map(fund => (
@@ -32,7 +34,7 @@ export default function FundListPage() {
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-sm font-semibold text-si-dark">{fund.currentNav?.toFixed(4) ?? '--'}</p>
-                  <p className="text-xs text-si-gray">NAV</p>
+                  <p className="text-xs text-si-gray">{t('nav')}</p>
                   <span className={`inline-block w-3 h-3 rounded-full mt-1 ${RISK_COLORS[fund.riskLevel] ?? 'bg-gray-300'}`} />
                 </div>
               </div>

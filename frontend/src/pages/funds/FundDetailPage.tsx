@@ -1,19 +1,21 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
 import PageLayout from '../../components/PageLayout';
 import RiskGauge from '../../components/RiskGauge';
 import NavChart from '../../components/NavChart';
 
-const TABS = ['Overview', 'Holdings', 'Risk'];
-
 interface TopHolding { holdingName: string; weight: number; }
 
 export default function FundDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [tab, setTab] = useState('Overview');
   const navigate = useNavigate();
+  const { t } = useTranslation();
+
+  const TABS = [t('fundDetail_tabOverview'), t('fundDetail_tabHoldings'), t('fundDetail_tabRisk')];
+  const [tab, setTab] = useState(TABS[0]);
 
   const { data: fund } = useQuery({
     queryKey: ['fund', id],
@@ -27,40 +29,44 @@ export default function FundDetailPage() {
     enabled: !!id,
   });
 
-  if (!fund) return <div className="flex justify-center py-10 text-sm text-si-gray">Loading…</div>;
+  if (!fund) return <div className="flex justify-center py-10 text-sm text-si-gray">{t('loading')}</div>;
+
+  const isOverview = tab === t('fundDetail_tabOverview');
+  const isHoldings = tab === t('fundDetail_tabHoldings');
+  const isRisk = tab === t('fundDetail_tabRisk');
 
   return (
     <PageLayout title={fund.name} showBack>
       <div className="px-4 py-4 border-b border-si-border">
-        <p className="text-xs text-si-gray">Current NAV (HKD)</p>
+        <p className="text-xs text-si-gray">{t('fundDetail_currentNav')}</p>
         <p className="text-2xl font-bold text-si-dark">{fund.currentNav?.toFixed(4) ?? '--'}</p>
         <p className="text-xs text-si-gray mt-1">{fund.navDate}</p>
       </div>
 
       <div className="flex border-b border-si-border">
-        {TABS.map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`flex-1 py-2 text-sm font-medium ${tab === t ? 'border-b-2 border-si-red text-si-red' : 'text-si-gray'}`}>
-            {t}
+        {TABS.map(tabLabel => (
+          <button key={tabLabel} onClick={() => setTab(tabLabel)}
+            className={`flex-1 py-2 text-sm font-medium ${tab === tabLabel ? 'border-b-2 border-si-red text-si-red' : 'text-si-gray'}`}>
+            {tabLabel}
           </button>
         ))}
       </div>
 
-      {tab === 'Overview' && (
+      {isOverview && (
         <div>
-          <NavChart fundId={fund.id} chartLabel="Cumulative return (%)" />
+          <NavChart fundId={fund.id} chartLabel={t('fundDetail_chartLabel')} />
           <div className="px-4 py-3 space-y-2 text-sm">
             <div className="flex justify-between">
-              <span className="text-si-gray">Management fee</span>
-              <span className="font-medium">{(fund.annualMgmtFee * 100).toFixed(2)}% p.a.</span>
+              <span className="text-si-gray">{t('fundDetail_mgmtFee')}</span>
+              <span className="font-medium">{(fund.annualMgmtFee * 100).toFixed(2)}{t('fundDetail_pa')}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-si-gray">Min. investment</span>
+              <span className="text-si-gray">{t('fundDetail_minInvestment')}</span>
               <span className="font-medium">HKD {fund.minInvestment?.toFixed(0)}</span>
             </div>
             {fund.benchmarkIndex && (
               <div className="flex justify-between">
-                <span className="text-si-gray">Benchmark</span>
+                <span className="text-si-gray">{t('fundDetail_benchmark')}</span>
                 <span className="font-medium text-right max-w-[55%]">{fund.benchmarkIndex}</span>
               </div>
             )}
@@ -68,12 +74,12 @@ export default function FundDetailPage() {
         </div>
       )}
 
-      {tab === 'Risk' && <RiskGauge productRiskLevel={fund.riskLevel} userRiskLevel={3} />}
+      {isRisk && <RiskGauge productRiskLevel={fund.riskLevel} userRiskLevel={3} />}
 
-      {tab === 'Holdings' && (
+      {isHoldings && (
         <div className="px-4 py-4">
           {topHoldings.length === 0 ? (
-            <p className="text-sm text-si-gray text-center py-8">No holdings data available</p>
+            <p className="text-sm text-si-gray text-center py-8">{t('fundDetail_noHoldings')}</p>
           ) : (
             <div className="space-y-2">
               {topHoldings.map((h, i) => (
@@ -90,7 +96,7 @@ export default function FundDetailPage() {
       <div className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-[430px] p-4 bg-white border-t border-si-border">
         <button onClick={() => navigate(`/order?fundId=${fund.id}`)}
           className="w-full bg-si-red text-white rounded-lg py-3 font-semibold text-sm active:bg-red-700">
-          Invest now
+          {t('fundDetail_investNow')}
         </button>
       </div>
     </PageLayout>

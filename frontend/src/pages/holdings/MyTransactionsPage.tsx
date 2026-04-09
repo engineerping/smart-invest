@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../../api/client';
 import PageLayout from '../../components/PageLayout';
 
@@ -9,6 +10,7 @@ const STATUS_STYLES: Record<string, string> = {
 };
 
 export default function MyTransactionsPage() {
+  const { t } = useTranslation();
   const { data: ordersPage } = useQuery({
     queryKey: ['orders'],
     queryFn: () => apiClient.get('/api/orders').then(r => r.data),
@@ -16,7 +18,7 @@ export default function MyTransactionsPage() {
   const orders = ordersPage?.content ?? [];
 
   return (
-    <PageLayout title="My Transactions" showBack>
+    <PageLayout title={t('transactions_title')} showBack>
       <div className="divide-y divide-si-border">
         {orders.map((order: any) => (
           <div key={order.id} className="px-4 py-4">
@@ -33,7 +35,7 @@ export default function MyTransactionsPage() {
           </div>
         ))}
         {orders.length === 0 && (
-          <p className="text-sm text-si-gray text-center py-8">No transactions</p>
+          <p className="text-sm text-si-gray text-center py-8">{t('transactions_none')}</p>
         )}
       </div>
     </PageLayout>
