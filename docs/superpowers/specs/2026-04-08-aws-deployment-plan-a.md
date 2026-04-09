@@ -55,14 +55,20 @@ Developer (git push)
 1. 登录 AWS Console → 搜索 **IAM** → Users → Create user
 2. 用户名：`smart-invest-deploy`
 3. 勾选 **Provide user access to the AWS Management Console**（可选）
-4. Permissions：选 **Attach policies directly**，添加以下托管策略：
+4. Permissions：选 **Add user to group**，选择 Create group 以创建用户组。
+5. User group name 填 smart-invest-deploy-group，
+  Permissions policies (6/1145) 中，按照以下Policy name 搜索并勾选对应 policy:
+   添加以下托管策略：
    - `AmazonEC2FullAccess`
    - `AmazonS3FullAccess`
    - `CloudFrontFullAccess`
-   - `AmazonECR_FullAccess`（ECR = Elastic Container Registry）
+   - `AmazonEC2ContainerRegistryFullAccess`
    - `SecretsManagerReadWrite`
    - `AmazonSESFullAccess`
-5. 创建完成后进入用户 → **Security credentials** → **Create access key**
+  最后点击 Create user group
+6. 回到create user界面，在user groups中勾选刚才创建的 smart-investment-deploy-group,点击 Next
+
+5. 创建完成后点击 Return tousers list → **Security credentials** → **Create access key**
 6. 选 **Application running outside AWS** → 下载 CSV（只有这一次机会！）
 
 > **重要**：把 Access Key ID 和 Secret Access Key 保存好，后面 GitHub Actions 要用。
