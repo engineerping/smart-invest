@@ -4,5 +4,6 @@ CREATE TABLE fund_top_holdings (
     holding_name VARCHAR(200) NOT NULL,
     weight       DECIMAL(6,2) NOT NULL,
     as_of_date   DATE         NOT NULL,
-    sequence     SMALLINT     NOT NULL
+    sequence     SMALLINT     NOT NULL,
+    UNIQUE (fund_id, holding_name, as_of_date)
 );

@@ -3,5 +3,6 @@ CREATE TABLE fund_geo_allocations (
     fund_id     UUID         NOT NULL REFERENCES funds(id),
     region      VARCHAR(100) NOT NULL,
     percentage  DECIMAL(6,2) NOT NULL,
-    as_of_date  DATE         NOT NULL
+    as_of_date  DATE         NOT NULL,
+    UNIQUE (fund_id, region, as_of_date)
 );

@@ -50,6 +50,7 @@ See `docs/superpowers/plans/` for the full implementation plan.
 # === PostgreSQL (Docker) ===
 docker compose up -d postgres;      # Start
 docker compose down;                # Stop
+docker compose down -v;             # Stop and delete volumes and remove network
 
 # === Backend ===
 # Start: (http://localhost:8080)

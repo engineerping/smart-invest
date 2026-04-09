@@ -2,7 +2,6 @@
 
 # Smart Invest
 
-
 [![Java](https://img.shields.io/badge/Java-21-ED8B00?logo=openjdk&logoColor=white)](https://openjdk.org/)
 [![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.3-6DB33F?logo=springboot&logoColor=white)](https://spring.io/projects/spring-boot)
 [![React](https://img.shields.io/badge/React-18-20232A?logo=react&logoColor=61DAFB)](https://react.dev/)
@@ -27,6 +26,7 @@ Smart Invest is a **Low-cost investment platform** through which, Banks pool sma
 - Build custom portfolios with risk-matched fund allocation
 - Set up automated monthly investment plans
 - Track holdings with real-time unrealised P&L
+
 ---
 
 **Architecture:** Modular Monolith on AWS following the [Well-Architected Framework](https://aws.amazon.com/architecture/well-architected/) — cost-optimised for a `$200` credit budget (~5–6 months of live operation at ~$34/month).

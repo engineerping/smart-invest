@@ -5,6 +5,8 @@ spring:
     password: localdev_only
   jpa:
     show-sql: true
+    hibernate:
+      ddl-auto: none
 
 jwt:
   secret: local-dev-secret-key-minimum-256-bits-long-padded-here

@@ -1,16 +1,17 @@
 version: '3.9'
+# docker compose 命令默认会读取这文件docker-compose.yml中的内容,例如命令docker compose up -d postgres 就会根据这个文件中的定义的 service name 即 postgres 来启动服务
 services:
-  postgres:
+  postgres: # 定义 ervice name 为 postgres; 例如命令docker compose up -d postgres 会用到这个服务名称 postgres; 另外可以在其他服务中通过这个名称访问数据库
     image: postgres:16-alpine
-    container_name: smart-invest-db
+    container_name: smart-invest-db          # 容器名称
     ports:
-      - "5432:5432"
+      - "5432:5432"                          # 宿主机端口:容器端口
     environment:
-      POSTGRES_DB: smartinvest
-      POSTGRES_USER: smartadmin
-      POSTGRES_PASSWORD: localdev_only
+      POSTGRES_DB: smartinvest               # 数据库名
+      POSTGRES_USER: smartadmin              # 用户名
+      POSTGRES_PASSWORD: localdev_only       # 密码（仅供开发）
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data  # — 告诉 Docker "把名叫postgres_data的这个卷挂载到容器里的 /var/lib/postgresql/data 目录"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U smartadmin -d smartinvest"]
       interval: 10s
@@ -18,4 +19,4 @@ services:
       retries: 5
 
 volumes:
-  postgres_data:
+  postgres_data:                              # 告诉 Docker "我有一个卷叫 postgres_data"，会在第 13 行应用到

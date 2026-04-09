@@ -3,5 +3,6 @@ CREATE TABLE fund_sector_allocations (
     fund_id     UUID         NOT NULL REFERENCES funds(id),
     sector      VARCHAR(100) NOT NULL,
     percentage  DECIMAL(6,2) NOT NULL,
-    as_of_date  DATE         NOT NULL
+    as_of_date  DATE         NOT NULL,
+    UNIQUE (fund_id, sector, as_of_date)
 );
