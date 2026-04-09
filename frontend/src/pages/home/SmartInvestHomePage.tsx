@@ -36,7 +36,7 @@ export default function SmartInvestHomePage() {
         <div className="flex items-center gap-3">
           <button
             onClick={toggleLang}
-            className="text-xs px-2 py-1 rounded border border-si-border text-si-gray hover:bg-si-light transition-colors"
+            className="text-xs font-bold px-3 py-1 rounded-full bg-gradient-to-r from-si-red to-orange-400 text-white shadow hover:opacity-90 transition-opacity"
           >
             {i18n.language === 'en' ? '中文' : 'EN'}
           </button>

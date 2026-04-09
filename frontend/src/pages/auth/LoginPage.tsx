@@ -10,7 +10,13 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const setToken = useAuthStore(s => s.setToken);
   const navigate = useNavigate();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+
+  const toggleLang = () => {
+    const next = i18n.language === 'en' ? 'zh' : 'en';
+    i18n.changeLanguage(next);
+    localStorage.setItem('lang', next);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -25,7 +31,15 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col justify-center px-6 bg-white">
+    <div className="relative min-h-screen flex flex-col justify-center px-6 bg-white">
+      <div className="absolute top-4 right-6">
+        <button
+          onClick={toggleLang}
+          className="text-xs font-bold px-3 py-1 rounded-full bg-gradient-to-r from-si-red to-orange-400 text-white shadow hover:opacity-90 transition-opacity"
+        >
+          {i18n.language === 'en' ? '中文' : 'EN'}
+        </button>
+      </div>
       <div className="mb-8">
         <div className="w-12 h-12 bg-si-red rounded-lg mb-4" />
         <h1 className="text-2xl font-bold text-si-dark">Smart Invest</h1>
