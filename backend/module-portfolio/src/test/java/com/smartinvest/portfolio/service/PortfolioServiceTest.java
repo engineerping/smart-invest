@@ -5,6 +5,7 @@ import com.smartinvest.fund.repository.FundNavHistoryRepository;
 import com.smartinvest.portfolio.domain.Holding;
 import com.smartinvest.portfolio.dto.HoldingResponse;
 import com.smartinvest.portfolio.repository.HoldingRepository;
+import com.smartinvest.fund.repository.FundRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -25,6 +26,7 @@ class PortfolioServiceTest {
 
     @Mock HoldingRepository holdingRepository;
     @Mock FundNavHistoryRepository fundNavHistoryRepository;
+    @Mock FundRepository fundRepository;
     @InjectMocks PortfolioService portfolioService;
 
     @Test
