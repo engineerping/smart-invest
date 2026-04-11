@@ -1,21 +1,17 @@
-#GitHub Actions workflow for Continuous Deployment of Smart Invest application to AWS
-# This workflow is triggered on pushes to the main branch. It builds the backend and frontend,
-# uploads the backend JAR to S3, and deploys it to EC2 via SSM. It also syncs the frontend build to S3 and invalidates CloudFront cache.
-# Note: This workflow assumes that the necessary AWS credentials and configuration are stored in GitHub Secrets.
+# GitHub Actions workflow for Continuous Deployment of Smart Invest application to AWS
+# 此工作流在有代码被推送到 main 分支时触发。
+# 后端：构建 JAR → 打包 Docker 镜像 → 推送到 ECR → SSH 进 EC2 → docker compose up
+# 前端：npm build → 同步到 S3 → 刷新 CloudFront 缓存
 
-# 这个文件是 GitHub Actions 工作流，用于将 Smart Invest 应用程序持续部署到 AWS
-# 此工作流在有代码被推送到 main 分支时触发。它构建后端和前端，
-# 将后端 JAR 上传到 S3，并通过 SSM 部署到 EC2。它还将前端构建同步到 S3 并使 CloudFront 缓存失效。
-# 注意：此工作流假设必要的 AWS 凭证和配置存储在 GitHub Secrets 中。
-# 
 name: CD
 
-on: # CD 持续集成工作 在 main 分支有代码被推送时触发
+on:
   push:
     branches: [main]
 
 env:
   AWS_REGION: ap-southeast-1
+  ECR_REPOSITORY: smart-invest
 
 jobs:
   deploy-backend:
@@ -39,22 +35,48 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region:            ${{ env.AWS_REGION }}
 
-      - name: Upload JAR to S3
-        run: |
-          aws s3 cp backend/app/target/smart-invest-app.jar \
-            s3://${{ secrets.S3_BUCKET }}/smart-invest-app.jar
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Deploy via SSM
+      - name: Build and push Docker image to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
         run: |
-          aws ssm send-command \
-            --instance-ids ${{ secrets.EC2_INSTANCE_ID }} \ #
-            --document-name "AWS-RunShellScript" \
-            --parameters commands='[
-              "aws s3 cp s3://${{ secrets.ARTIFACT_BUCKET }}/smart-invest-app.jar /opt/smart-invest/app.jar",
-              "sudo systemctl restart smart-invest",
-              "sleep 15",
-              "sudo systemctl is-active smart-invest"
-            ]'
+          docker build -f backend/Dockerfile -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG backend/
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Deploy to EC2 via SSH
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host:        ${{ secrets.EC2_HOST }}
+          username:    ec2-user
+          key:         ${{ secrets.EC2_SSH_KEY }}
+          envs:        ECR_REGISTRY,ECR_REPOSITORY,IMAGE_TAG,AWS_REGION
+          script: |
+            # 登录 ECR
+            aws ecr get-login-password --region $AWS_REGION \
+              | docker login --username AWS --password-stdin $ECR_REGISTRY
+
+            cd ~/smart-invest
+
+            # 更新镜像 tag
+            export ECR_REGISTRY=$ECR_REGISTRY
+            export IMAGE_TAG=$IMAGE_TAG
+
+            # 拉取新镜像并重启 app（不影响 postgres）
+            docker compose pull app
+            docker compose up -d app
+
+            # 等待服务启动，检查健康状态
+            sleep 15
+            docker compose ps app
 
   deploy-frontend:
     name: Deploy Frontend
@@ -71,7 +93,6 @@ jobs:
       - name: Build
         working-directory: frontend
         env:
-          # 确保构建时能正确读取 API_BASE_URL 环境变量，API_BASE_URL 在  AWS 的 可以找到
           VITE_API_BASE_URL: ${{ secrets.API_BASE_URL }}
         run: |
           npm ci
@@ -86,7 +107,7 @@ jobs:
       - name: Sync to S3
         working-directory: frontend
         run: |
-          aws s3 sync dist/ s3://${{ secrets.FRONTEND_BUCKET }}/ --delete \ 
+          aws s3 sync dist/ s3://${{ secrets.FRONTEND_BUCKET }}/ --delete \
             --cache-control "public, max-age=31536000, immutable"
           aws s3 cp dist/index.html s3://${{ secrets.FRONTEND_BUCKET }}/index.html \
             --cache-control "no-cache"
