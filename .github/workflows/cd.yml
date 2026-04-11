@@ -6,8 +6,9 @@
 name: CD
 
 on:
-  push:
+  push: # 当有代码推送到 main 分支时自动触发
     branches: [main]
+  workflow_dispatch: # 允许手动触发：在 GitHub 仓库 → Actions 标签页 → 选中此 workflow → 点击 "Run workflow" 按钮手动触发，方便调试
 
 env:
   AWS_REGION: ap-southeast-1

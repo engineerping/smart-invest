@@ -1,9 +1,10 @@
 # 这个文件是给 GitHub 的 Github Actions 用的，定义了 CI 流程，当有 PR 提交到 main 或 develop 分支时触发，分别执行后端构建和测试、前端构建和类型检查，以及 Terraform 配置验证。
 name: CI
 
-on: # 触发条件，这里设置为当有 PR 提交到 main 或 develop 分支时触发
-  pull_request:
+on: # 触发条件
+  pull_request: # 当有 PR 提交到 main 或 develop 分支时自动触发
     branches: [main, develop]
+  workflow_dispatch: # 允许手动触发：在 GitHub 仓库 → Actions 标签页 → 选中此 workflow → 点击 "Run workflow" 按钮手动触发，方便调试
 
 jobs: # 定义多个 job，分别负责后端、前端和 Terraform 的 CI 流程
   backend: # 后端构建和测试
