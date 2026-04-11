@@ -31,6 +31,7 @@ Smart Invest is a **Low-cost investment platform** through which, Banks pool sma
 
 **Architecture:** Modular Monolith on AWS following the [Well-Architected Framework](https://aws.amazon.com/architecture/well-architected/) — cost-optimised for a `$200` credit budget (~5–6 months of live operation at ~$34/month).
 
+**Cost Plan:** I have implemented AWS Instance Scheduler to enable services only during weekdays (8:00-12:00 and 14:00-18:00), and automatically shut down EC2 and RDS at other times, reducing server operating costs.
 ---
 
 ## Table of Contents

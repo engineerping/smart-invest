@@ -29,7 +29,10 @@ Smart Invest 是一款**小成本投资平台**，通过这软件，银行将诸
 
 ---
 
-**架构方案：** 在 AWS 上部署的模块化单体架构，遵循 [AWS Well-Architected Framework](https://aws.amazon.com/architecture/well-architected/) 五大支柱——针对 `$200` 积分预算进行成本优化（月均约 $34，可持续运行约 5–6 个月）。
+**架构方案:** 在 AWS 上部署的模块化单体架构，遵循 [AWS Well-Architected Framework](https://aws.amazon.com/architecture/well-architected/) 五大支柱——针对 `$200` 积分预算进行成本优化（月均约 $34，可持续运行约 5–6 个月）。
+
+**成本方案:** 个人已通过 AWS Instance Scheduler 实现仅在工作日的（8:00-12:00和14:00-18:00）之间开启服务，其他时间自动关闭 EC2 和 RDS，降低服务器运行成本。
+
 
 ---
 

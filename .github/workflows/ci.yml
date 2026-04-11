@@ -1,50 +1,51 @@
+# 这个文件是给 GitHub 的 Github Actions 用的，定义了 CI 流程，当有 PR 提交到 main 或 develop 分支时触发，分别执行后端构建和测试、前端构建和类型检查，以及 Terraform 配置验证。
 name: CI
 
-on:
+on: # 触发条件，这里设置为当有 PR 提交到 main 或 develop 分支时触发
   pull_request:
     branches: [main, develop]
 
-jobs:
-  backend:
+jobs: # 定义多个 job，分别负责后端、前端和 Terraform 的 CI 流程
+  backend: # 后端构建和测试
     name: Backend Build & Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4 # 第一步：检出代码到 runner 上，@v4 是指定使用 actions/checkout 的第四个主要版本
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4 # 第二步：设置 Java 环境，指定版本和发行版，并启用 Maven 依赖缓存
         with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: 'maven'
+          java-version: '21' 
+          distribution: 'temurin' # 选择 Temurin 作为 JDK 发行版
+          cache: 'maven' # 启用 Maven 依赖缓存
 
       - name: Build and test
-        run: mvn -B clean verify --file backend/pom.xml
+        run: mvn -B clean verify --file backend/pom.xml # -B 参数表示非交互模式，适合 CI 环境
 
-      - uses: actions/upload-artifact@v4
-        if: always()
+      - uses: actions/upload-artifact@v4 # 上传测试报告等构建产物，方便在 GitHub Actions UI 中查看
+        if: always() # 无论构建成功与否都上传产物，方便调试失败的构建
         with:
-          name: surefire-reports
-          path: backend/**/target/surefire-reports/
+          name: surefire-reports # 产物名称，可以自定义
+          path: backend/**/target/surefire-reports/ # 产物路径，根据 Maven Surefire 插件的默认输出路径设置
 
-  frontend:
+  frontend: # 前端构建和类型检查
     name: Frontend Build & Type-check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4 
 
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json # 启用 npm 依赖缓存，指定 package-lock.json 作为依赖文件
 
-      - run: npm ci
+      - run: npm ci # npm ci 是 npm 的一个命令，用于安装依赖，适合 CI 环境，确保安装的依赖版本与 package-lock.json 中锁定的一致
+        working-directory: frontend #这是代码github仓库根目录下的 frontend 文件夹
+
+      - run: npm run build # 构建前端项目，执行 package.json 中定义的 build 脚本
         working-directory: frontend
 
-      - run: npm run build
-        working-directory: frontend
-
-  terraform-validate:
+  terraform-validate: #这个的作用是验证 Terraform 配置文件的正确性，确保没有语法错误或者其他明显的问题，虽然它不会真正部署基础设施，但可以在 CI 阶段捕获一些常见的错误，提升代码质量。
     name: Terraform Validate
     runs-on: ubuntu-latest
     steps:
