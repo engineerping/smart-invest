@@ -18,5 +18,10 @@
             <artifactId>module-plan</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.smartinvest</groupId>
+            <artifactId>module-order</artifactId>
+            <version>${project.version}</version>
+        </dependency>
     </dependencies>
 </project>

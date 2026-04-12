@@ -1,5 +1,6 @@
 package com.smartinvest.scheduler;
 
+import com.smartinvest.order.service.OrderSettlementService;
 import com.smartinvest.plan.service.InvestmentPlanService;
 import lombok.*;
 import lombok.extern.slf4j.Slf4j;
@@ -14,6 +15,7 @@ import java.time.*;
 public class MonthlyInvestmentScheduler {
 
     private final InvestmentPlanService planService;
+    private final OrderSettlementService settlementService;
 
     /** Execute monthly plans — runs daily at 01:00 HKT on weekdays. */
     @Scheduled(cron = "0 0 1 * * *", zone = "Asia/Hong_Kong")
@@ -26,6 +28,13 @@ public class MonthlyInvestmentScheduler {
         var duePlans = planService.findPlansDueOn(today);
         log.info("Monthly plan execution: {} plans due on {}", duePlans.size(), today);
         // TODO: Execute each plan by calling OrderService.placeOrder()
+    }
+
+    /** Settle due orders — runs weekdays at 17:30 HKT after market close. */
+    @Scheduled(cron = "0 30 17 * * MON-FRI", zone = "Asia/Hong_Kong")
+    public void settleOrders() {
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Hong_Kong"));
+        settlementService.settleDueOrders(today);
     }
 
     /** Simulate NAV updates — runs weekdays at 15:00 HKT. */

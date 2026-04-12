@@ -8,4 +8,5 @@ import java.util.*;
 public interface FundNavHistoryRepository extends JpaRepository<FundNavHistory, Long> {
     List<FundNavHistory> findByFundIdAndNavDateAfterOrderByNavDateAsc(UUID fundId, LocalDate after);
     Optional<FundNavHistory> findTopByFundIdOrderByNavDateDesc(UUID fundId);
+    Optional<FundNavHistory> findTopByFundIdAndNavDateLessThanEqualOrderByNavDateDesc(UUID fundId, LocalDate asOf);
 }

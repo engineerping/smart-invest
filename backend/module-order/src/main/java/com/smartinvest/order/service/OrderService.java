@@ -16,6 +16,7 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderReferenceGenerator referenceGenerator;
     private final SettlementDateCalculator settlementDateCalculator;
+    private final OrderSettlementExecutor settlementExecutor;
 
     public Order placeOrder(UUID userId, PlaceOrderRequest req) {
         Order order = new Order();
@@ -28,7 +29,13 @@ public class OrderService {
         order.setSettlementAccount(req.settlementAccount());
         order.setReferenceNumber(referenceGenerator.generate(req.orderType()));
         order.setSettlementDate(settlementDateCalculator.calculate(order.getOrderDate(), 2));
-        return orderRepository.save(order);
+        Order saved = orderRepository.save(order);
+        // [DEMO] 下单后立即结算，让 My Holdings 页面的 Total Market Value 实时反映持仓变化。
+        // 生产环境应移除此调用，改由定时任务在 settlement_date 到期后统一结算 Start。
+        settlementExecutor.settle(saved);
+        // 生产环境应移除此调用，改由定时任务在 settlement_date 到期后统一结算 End。
+
+        return saved;
     }
 
     public Page<OrderResponse> getOrders(UUID userId, int page, int size) {
