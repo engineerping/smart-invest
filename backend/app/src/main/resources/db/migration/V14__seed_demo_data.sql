@@ -3,7 +3,7 @@ INSERT INTO users (id, email, password, full_name, risk_level, status)
 VALUES (
     '00000000-0000-0000-0000-000000000001',
     'demo@smartinvest.com',
-    '$2b$10$CWigwJD/MS7E4dCtxgzxfOBetBscLVIVsKqC4x5qESBrarqoAzPDS',
+    '$2y$10$z46I149lLF1jlsIGwlpRX.zML0aCkzwOFNzex.8G9Eh1IsVeushwa',
     'Demo User',
     4,
     'ACTIVE'

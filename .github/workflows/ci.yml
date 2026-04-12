@@ -2,8 +2,9 @@
 name: CI
 
 on: # 触发条件
-  pull_request: # 当有 PR 提交到 main 或 develop 分支时自动触发
-    branches: [main, develop]
+  #push: # 当有代码推送到 main 分支时自动触发
+  #pull_request: # 当有 PR 提交到 main 或 develop 分支时自动触发
+  #  branches: [master, develop]
   workflow_dispatch: # 允许手动触发：在 GitHub 仓库 → Actions 标签页 → 选中此 workflow → 点击 "Run workflow" 按钮手动触发，方便调试
 
 jobs: # 定义多个 job，分别负责后端、前端和 Terraform 的 CI 流程
