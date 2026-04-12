@@ -70,7 +70,7 @@ Developer (git push)
    将 smart-invest-deploy-user 添加入 smart-investment-deploy-group 这个用户组，点击 Next
 7. 创建完成后点击 Return tousers list, 回到 IAM > Users 页面
 8. 点击刚才创建的 smart-invest-deploy-user 用户，进入用户详情页→ **Create access key**
-6. 选 **Application running outside AWS** → 点击 Create access Key,下载 CSV（只有这一次机会！）
+9. 选 **Application running outside AWS** → 点击 Create access Key,下载 CSV（只有这一次机会！）
 
 > **重要**：把 Access Key ID 和 Secret Access Key 保存好，后面 GitHub Actions 要用。
 
@@ -84,7 +84,7 @@ brew install awscli
 aws configure
 # AWS Access Key ID: AKIA...
 # AWS Secret Access Key: xxxx
-# Default region name: us-east-1
+# Default region name: ap-southeast-1
 # Default output format: json
 
 # 验证
@@ -93,16 +93,40 @@ aws sts get-caller-identity
 
 ---
 
-## 第二步：创建 ECR 仓库（存 Docker 镜像）
+## 第二步：创建 ECR（Elastic Container Registry） 仓库（存 Docker 镜像）
 
 ```bash
-# 创建仓库
+# 在本机的 terminal 中 用以下命令在 AWS 上创建仓库
 aws ecr create-repository \
   --repository-name smart-invest \
-  --region us-east-1
+  --region ap-southeast-1
+
+ ## 删除仓库（慎用，会删除所有镜像！）
+  #aws ecr delete-repository \
+   # --repository-name smart-invest \
+   # --region ap-southeast-1 \
+   # --force
 
 # 记下输出中的 repositoryUri，格式类似：
-# 123456789.dkr.ecr.us-east-1.amazonaws.com/smart-invest
+# "repositoryUri": <YOUR_AWS_ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com/smart-invest  # <YOUR_AWS_ACCOUNT_ID> 是你的 AWS Account ID（12位数字，例：123456789012），见 AWS console 右上角
+```
+
+{
+  "repository": {
+    "repositoryArn": "arn:aws:ecr:ap-southeast-1:<YOUR_AWS_ACCOUNT_ID>:repository/smart-invest",  // 例：arn:aws:ecr:ap-southeast-1:123456789012:repository/smart-invest
+    "registryId": "<YOUR_AWS_ACCOUNT_ID>",  // 例：123456789012
+    "repositoryName": "smart-invest",
+    "repositoryUri": "<YOUR_AWS_ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com/smart-invest",  // 例：123456789012.dkr.ecr.ap-southeast-1.amazonaws.com/smart-invest
+    "createdAt": "2026-04-09T19:15:35.510000+08:00",
+    "imageTagMutability": "MUTABLE",
+    "imageScanningConfiguration": {
+        "scanOnPush": false
+    },
+    "encryptionConfiguration": {
+        "encryptionType": "AES256"
+    }
+  }
+}
 ```
 
 ---
@@ -113,29 +137,30 @@ aws ecr create-repository \
 
 AWS Console → EC2 → Key Pairs → Create key pair
 
-- Name: `smart-invest-key`
+- Name: `smart-invest-ec2-keypair`
 - Type: RSA
 - Format: `.pem`
-- 下载后保存到 `~/.ssh/smart-invest-key.pem`
-
+- 下载后保存到 `~/.ssh/smart-invest-ec2-keypair.pem`
+- 设置权限（Mac/Linux）：
 ```bash
-chmod 400 ~/.ssh/smart-invest-key.pem
+chmod 400 ~/.ssh/smart-invest-ec2-keypair.pem
 ```
 
-### 3.2 创建 Security Group
+### 3.2 创建 Security Group (Security Group 页面解释:安全组充当实例的虚拟防火墙，用于控制入站和出站流量)
 
 AWS Console → EC2 → Security Groups → Create security group
 
-- Name: `smart-invest-sg`
-- Description: Smart Invest backend
+- Name: `smart-invest-security-group`
+- Description: Smart Invest backend security group 
 - Inbound rules（入站规则）：
 
 | Type       | Protocol | Port | Source    | 说明                |
 | ---------- | -------- | ---- | --------- | ----------------- |
-| SSH        | TCP      | 22   | My IP     | 只允许你的 IP SSH      |
+| SSH        | TCP      | 22   | My IP     | 只允许你的 IP SSH，（如果本地开了 VPN，则 SSH 连不上，需要将 安全组中 SSH 的Source 临时改为 0.0.0.0/0允许任何 IP）      | 
 | Custom TCP | TCP      | 8080 | 0.0.0.0/0 | CloudFront 转发后端请求 |
 
 > 安全建议：8080 理想情况只对 CloudFront IP 开放，但入门阶段先开 0.0.0.0/0 更简单。
+最后点击右下角 Create security group 创建完成。
 
 ### 3.3 启动 EC2 实例
 
@@ -144,18 +169,27 @@ AWS Console → EC2 → Launch Instance
 - **Name**: smart-invest-server
 - **AMI**: Amazon Linux 2023（免费套餐可用）
 - **Instance type**: t3.micro
-- **Key pair**: 选刚才创建的 `smart-invest-key`
-- **Security group**: 选 `smart-invest-sg`
+- **Key pair**: 选刚才创建的 `smart-invest-ec2-keypair`
+- **Network settings > Security group**: 选刚才创建的 `smart-invest-security-group`
 - **Storage**: 默认 8GB 即可
-- 点 **Launch instance**
-
-启动后记下 **Public IPv4 address**（如 `54.12.34.56`）
+- 点击 **Launch instance**
+- （可选）为避免账单超额，
+  - 建议设置 Billing and Cost Management 计费与成本管理
+  - 建议设置自动停止：
+    - 选中新实例 → Actions → Instance state → **Create stop schedule**
+    - Schedule type: One time schedule
+    - Date & time: 24小时后（比如明天同一时间）
+    - Action: Stop
+    - Create schedule
+- 最后点击右下角的 View all instances.
+- 点击 instance ID 进入实例详情页，等待状态变为 Running 后，
+启动后记下 **Public IPv4 address**（如 `<YOUR_EC2_PUBLIC_IP>`，例：`13.229.181.210`）
 
 ### 3.4 在 EC2 上安装 Docker
 
 ```bash
-# SSH 进入服务器
-ssh -i ~/.ssh/smart-invest-key.pem ec2-user@54.12.34.56
+# SSH 进入服务器 （如果本地开了 VPN，则 SSH 连不上，需要将 安全组中 SSH 的Source 临时改为 0.0.0.0/0允许任何 IP）
+ssh -i ~/.ssh/smart-invest-ec2-keypair.pem ec2-user@<YOUR_EC2_PUBLIC_IP>  # 例：13.229.181.210
 
 # 安装 Docker
 sudo yum update -y
@@ -171,26 +205,54 @@ sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-
 sudo chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
 # 安装 AWS CLI（EC2 上也需要，用于拉取 ECR 镜像）
-sudo yum install -y awscli
+#sudo yum install -y awscli #这样安装的讲师 aws-cli v1，我们需要的是V2，所以下面是安装 AWS CLI v2 的命令
+  ### 1. 下载安装包
+  curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+  ### 2. 解压
+  unzip awscliv2.zip
+  ### 3. 安装
+  sudo ./aws/install
+  ### 4. 验证
+  aws --version
+
+  ### 5. 如果没有 unzip，先安装：
+  sudo yum install -y unzip
+
+  正常输出类似：aws-cli/2.x.x Python/3.x.x Linux/...
 
 # 退出并重新登录（使 docker 用户组生效）
 exit
-ssh -i ~/.ssh/smart-invest-key.pem ec2-user@54.12.34.56
+ssh -i ~/.ssh/smart-invest-ec2-keypair.pem ec2-user@<YOUR_EC2_PUBLIC_IP>  # 例：13.229.181.210
 docker --version   # 验证
 ```
 
 ### 3.5 给 EC2 赋予 ECR 和 Secrets Manager 权限
 
-1. AWS Console → EC2 → 选中你的实例 → Actions → Security → **Modify IAM role**
-2. 点 **Create new IAM role**
-   - Trusted entity: EC2
-   - 添加权限：`AmazonECR_FullAccess`、`SecretsManagerReadOnly`、`AmazonSESFullAccess`
-   - Role name: `smart-invest-ec2-role`
-3. 回到 Modify IAM role 页，选择 `smart-invest-ec2-role`，Save
+> **注意**：从 EC2 的 "Modify IAM role" 页点 "Create new IAM role" 会打开一个简化弹窗，该弹窗每次只能附加一个策略，不适合我们需要附加多个策略的场景。请按以下步骤走完整的 IAM 控制台流程。
+
+**第一部分：在 IAM 控制台创建 Role**
+
+1. 新开标签页 → 搜索 **IAM** → 左侧菜单 **Roles** → **Create role**
+2. **Trusted entity type**：选 **AWS service**
+3. **Use case**：下拉选 **EC2** → 点 **Next**
+4. **Add permissions** 页：依次搜索并勾选以下 3 个策略：
+   - `AmazonEC2ContainerRegistryFullAccess`
+   - `SecretsManagerReadWrite`
+   - `AmazonSESFullAccess`
+5. 点 **Next**
+6. **Role name**：填 `smart-invest-ec2-role` → 点 **Create role**
+
+**第二部分：将 Role 绑定到 EC2 实例**
+
+1. 回到 **EC2 Console** → 选中 `smart-invest-server` 实例
+2. **Actions → Security → Modify IAM role**
+3. 下拉选择刚才创建的 `smart-invest-ec2-role`
+4. 点 **Update IAM role**
 
 ---
 
-## 第四步：AWS Secrets Manager 存储密钥
+## 第四步：在本地执行 aws 命令，将密码 等存入 AWS 上的 Secrets Manager 中（EC2 上也可以执行，但需要先 上在 EC2安装 AWS CLI）
+因为本地为 aws-cli 配置了登录 AWS 的凭据（~/.aws/credentials），所以可以在本地直接执行 aws 命令来操作 AWS 资源（比如 Secrets Manager），不需要 SSH 进入 EC2 后再执行。
 
 ```bash
 # 在本地执行（不是 EC2 上）
@@ -198,14 +260,14 @@ docker --version   # 验证
 # 存储数据库密码
 aws secretsmanager create-secret \
   --name "smart-invest/prod/db-password" \
-  --secret-string "your-strong-db-password-here" \
-  --region us-east-1
+  --secret-string "<YOUR_DB_PASSWORD>" \  # 例：MyStr0ngPassw0rd!
+  --region ap-southeast-1
 
 # 存储 JWT Secret（生成一个随机强密码）
 aws secretsmanager create-secret \
   --name "smart-invest/prod/jwt-secret" \
   --secret-string "$(openssl rand -base64 64)" \
-  --region us-east-1
+  --region ap-southeast-1
 ```
 
 > 记下你设置的数据库密码，第五步要用。
@@ -216,17 +278,17 @@ aws secretsmanager create-secret \
 
 ```bash
 # SSH 进入 EC2
-ssh -i ~/.ssh/smart-invest-key.pem ec2-user@54.12.34.56
+ssh -i ~/.ssh/smart-invest-ec2-keypair.pem ec2-user@<YOUR_EC2_PUBLIC_IP>  # 例：13.229.181.210
 
 # 创建项目目录
 mkdir ~/smart-invest && cd ~/smart-invest
 
 # 创建 .env 文件（存运行时环境变量）
 cat > .env << 'EOF'
-DB_PASSWORD=your-strong-db-password-here
-JWT_SECRET=从Secrets Manager复制过来
-AWS_REGION=us-east-1
-ECR_REGISTRY=123456789.dkr.ecr.us-east-1.amazonaws.com
+DB_PASSWORD=smart-invest/prod/db-password
+JWT_SECRET=smart-invest/prod/jwt-secret
+AWS_REGION=ap-southeast-1
+ECR_REGISTRY=<YOUR_AWS_ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com  # 例：123456789012
 IMAGE_TAG=latest
 EOF
 chmod 600 .env
@@ -278,11 +340,18 @@ EOF
 在项目根目录创建 `Dockerfile`：
 
 ```dockerfile
-# backend/Dockerfile（放在 backend/ 目录下）
+# backend/Dockerfile
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
 COPY app/target/app-*.jar app.jar
 ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+**作用**：GitHub Actions 的 CD 流程第一步就是用这个 Dockerfile 把编译好的 JAR 打包成 Docker 镜像，然后推送到 ECR。EC2 上不需要安装 Java，所有运行时都封装在镜像内。
+
+```bash
+# 本地验证文件存在
+ls backend/Dockerfile
 ```
 
 ---
@@ -292,70 +361,218 @@ ENTRYPOINT ["java", "-jar", "app.jar"]
 ```bash
 # 创建 bucket（名字全球唯一，换一个自己的名字）
 aws s3api create-bucket \
-  --bucket smart-invest-frontend-prod \
-  --region us-east-1
+  --bucket smart-invest-frontend-service-prod-bucket-name \
+  --region ap-southeast-1 \
+  --create-bucket-configuration LocationConstraint=ap-southeast-1
 
 # 关闭公开访问（通过 CloudFront 访问，不需要直接公开）
 aws s3api put-public-access-block \
-  --bucket smart-invest-frontend-prod \
+  --bucket smart-invest-frontend-service-prod-bucket-name \
   --public-access-block-configuration \
-    "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+    "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true" \
+  --region ap-southeast-1
 ```
 
 ---
 
 ## 第八步：创建 CloudFront 分发
 
-这一步在 AWS Console 操作更直观：
+## CloudFront配置前的相关说明：HTTPS 传输链路详解
+
+### 用户访问的是 HTTP 还是 HTTPS？
+
+**用户侧全程 HTTPS**。浏览器地址栏显示 `https://` 和绿色锁头，与正规商业网站体验一致。
+
+### 完整请求链路
+
+```
+浏览器（用户）
+    │
+    │  ① HTTPS（TLS 1.2/1.3）
+    │     CloudFront 自动提供 SSL/TLS 证书（ACM 托管）
+    │     证书域名：*.cloudfront.net
+    ▼
+CloudFront 边缘节点（全球 CDN）
+    │
+    ├── 路径匹配 /*（前端静态资源）
+    │       │  ② HTTPS → S3
+    │       │     CloudFront 与 S3 之间走 AWS 内部加密通道
+    │       │     通过 OAC（Origin Access Control）鉴权
+    │       ▼
+    │     S3 Bucket（私有，仅 CloudFront 可读）
+    │
+    └── 路径匹配 /api/*（后端 API）
+            │  ③ HTTP:8080 → EC2
+            │     CloudFront 与 EC2 之间走 AWS 数据中心内部网络
+            │     （与公网物理隔离，非公网明文传输）
+            ▼
+          EC2（Spring Boot :8080）
+                │
+                │  ④ TCP（容器内部网络）
+                ▼
+          PostgreSQL（:5432，仅容器内网可访问）
+```
+
+### 各段链路安全性分析
+
+| 链路段 | 协议 | 加密方式 | 说明 |
+| ----- | ---- | ------- | ---- |
+| 浏览器 → CloudFront | HTTPS | TLS 1.2/1.3 | CloudFront 自动签发并续期证书，无需手动管理 |
+| CloudFront → S3 | HTTPS | AWS 内部加密 | S3 bucket 设为私有，仅通过 OAC 允许 CloudFront 访问，外部无法直接访问 |
+| CloudFront → EC2 | HTTP | 无（AWS 内部网络） | 走 AWS 数据中心内部网络，与公网物理隔离；EC2 无需安装 SSL 证书 |
+| EC2 → PostgreSQL | TCP | 无（Docker 内部网络） | 数据库端口 5432 未对外暴露，仅容器间通信 |
+
+### 为什么 CloudFront → EC2 用 HTTP 是可接受的？
+
+这是一个常见的架构模式，原因如下：
+
+1. **物理隔离**：CloudFront 到 EC2 的流量走 AWS 内部骨干网络（不经过公网），不存在公网中间人攻击风险
+2. **边界加密**：安全边界在 CloudFront 处终止，用户侧始终是 HTTPS，满足绝大多数合规要求
+3. **成本与复杂度**：在 EC2 上配置 SSL 证书需要域名绑定和证书管理，入门阶段引入不必要的复杂度
+4. **行业实践**：AWS ELB（负载均衡器）+ EC2 的标准架构同样采用此模式（HTTPS 在 ELB 终止，ELB 到 EC2 用 HTTP）
+
+### 如果未来需要更高安全等级
+
+可在以下方向升级：
+
+- **绑定自定义域名 + ACM 证书**：将 `xxxx.cloudfront.net` 替换为自己的域名（如 `app.smart-invest.com`），在 AWS Certificate Manager 申请免费证书绑定到 CloudFront
+- **CloudFront → EC2 改用 HTTPS**：在 EC2 上安装证书（如 Let's Encrypt），Security Group 开放 443 端口，CloudFront Origin Protocol 改为 HTTPS only
+- **EC2 改为内网 IP + ALB**：EC2 放入私有子网，前面加 Application Load Balancer（ALB）处理 HTTPS 终止，EC2 不暴露公网 IP
+
+---
+开始配置：
+**CloudFront 的作用**：它是整个架构的统一入口。用户只访问一个 HTTPS 域名（`xxxx.cloudfront.net`），CloudFront 根据路径自动决定：请求 `/api/*` 转发给 EC2 后端，其余请求（`/*`）从 S3 获取前端静态文件。这样做的好处是：
+- 前后端使用同一个域名，彻底避免跨域（CORS）问题
+- CloudFront 自动提供 HTTPS，无需自己申请 SSL 证书
+- 前端静态资源在 CloudFront 全球节点缓存，访问更快
 
 1. AWS Console → **CloudFront** → Create distribution
 
 ### 8.1 配置 S3 Origin（前端）
 
-- **Origin domain**: 选择你的 S3 bucket
-- **Origin access**: 选 **Origin access control settings (recommended)**
-- 点 **Create new OAC**，默认设置即可 → Create
-- 会提示你更新 S3 bucket policy，点 **Copy policy**，待会粘贴
+**作用**：告诉 CloudFront 去哪里取前端文件。S3 存储的是 React 打包后的静态文件（HTML/JS/CSS），CloudFront 作为 CDN 代理对外暴露，用户无法直接访问 S3，安全性更高。
 
-**去 S3 更新 Bucket Policy**：
-S3 → 你的 bucket → Permissions → Bucket policy → 粘贴刚才复制的 policy → Save
+新版 AWS CloudFront 控制台采用分步向导，流程如下：
+
+**Step 2 - Get started（选择套餐）**
+
+- 选择免费套餐即可（Billing 显示 Free $0/month）
+
+**Step 3 - Specify origin（配置来源）**
+
+- **Distribution name**：填入 `smart-invest-front-distribution`
+- **S3 origin**：在下拉中选择你的 S3 bucket（`smart-invest-frontend-service-prod-bucket-name`）
+- **Grant CloudFront access to origin**：选 **Yes**
+  - 作用：让 CloudFront 获得读取 S3 的权限，同时 S3 bucket 保持私有（不对公网开放），只有 CloudFront 能读取其中的文件
+  - 新版 UI 会自动更新 S3 Bucket Policy，无需手动复制粘贴 Policy
+  - 页面蓝色提示框会显示："Because you granted CloudFront access to your origin, CloudFront can write and update S3 bucket policies..."
+
+**Step 4 - Enable security**
+
+- 保持默认或按需配置
+
+**Step 5 - Review and create**
+
+- 确认配置无误后点击 **Create distribution**
+
+> **注意**：新版 UI 已无需手动去 S3 更新 Bucket Policy，AWS 会在创建时自动完成。
 
 ### 8.2 配置默认行为（前端）
 
-- **Viewer protocol policy**: Redirect HTTP to HTTPS
-- **Cache policy**: CachingOptimized
+**作用**：定义 CloudFront 处理所有未匹配到其他规则的请求（即 `/*`，也就是前端页面请求）时的默认策略。
+
+创建向导完成后，进入 Distribution 配置默认行为：
+
+1. 进入刚创建的 Distribution → 点击 **Behaviors** 标签页
+2. 选中默认行为（`Default (*)`）→ 点击 **Edit**
+3. 修改以下两项：
+   - **Viewer protocol policy** → 选 `Redirect HTTP to HTTPS`
+     - 作用：用户输入 `http://` 时自动跳转到 `https://`，强制加密传输，防止中间人攻击
+   - **Cache policy** → 选 `CachingOptimized`
+     - 作用：前端静态文件（JS/CSS/图片）在 CloudFront 节点缓存，用户下次访问直接从最近的节点返回，不需要再回源 S3，速度更快、成本更低
+4. 点击 **Save changes**
+
+> 向导创建时 Cache settings 显示"will apply default cache settings"，默认值不一定是 CachingOptimized，创建后需手动确认并修改。
 
 ### 8.3 添加 EC2 Origin（后端）
 
-创建完 distribution 后：Distribution → Origins → Create origin
+**作用**：将 EC2 上运行的 Spring Boot 后端注册为 CloudFront 的第二个来源。注册后，CloudFront 才能在 8.4 中把 `/api/*` 请求转发给它。
 
-- **Origin domain**: 输入你的 EC2 公网 IP（如 `54.12.34.56`）
+创建完 distribution 后：Distribution → 选中你的 distribution → **Origins** 标签页 → **Create origin**
+
+- **Origin domain**: 输入你的 EC2 **Public IPv4 DNS**（不能用裸 IP，CloudFront 不支持）
+  - 在 EC2 Console → 选中实例 → 详情面板找 **Public IPv4 DNS**，格式如：`ec2-<YOUR_EC2_PUBLIC_IP_DASHES>.ap-southeast-1.compute.amazonaws.com`（例：`ec2-13-229-181-210.ap-southeast-1.compute.amazonaws.com`）
+  - 作用：告诉 CloudFront 后端服务器的地址
+- **Name**: 可保持自动填充，或改为 `ec2-backend`
 - **Protocol**: HTTP only
+  - 作用：CloudFront 到 EC2 之间的通信使用 HTTP（因为 EC2 上没有配置 SSL 证书）。用户到 CloudFront 之间仍然是 HTTPS，安全性不受影响
 - **HTTP port**: 8080
+  - 作用：指定 Spring Boot 监听的端口
+- **Origin access**: 选 **Public**（EC2 不是 S3，没有 OAC 概念，直接公网访问即可）
+- 其余保持默认
+
+点击右下角 **Save changes**
 
 ### 8.4 添加 /api/* 行为（路由到后端）
 
-Distribution → Behaviors → Create behavior
+**作用**：创建一条路由规则，让所有 `/api/` 开头的请求走 EC2 后端，而不是默认的 S3。这是前后端共用同一域名的关键配置。
+
+> **前提**：必须先完成 8.3，确保 EC2 origin 已创建，否则下拉列表中不会出现 EC2 origin 选项。
+
+Distribution → **Behaviors** 标签页 → **Create behavior**
 
 - **Path pattern**: `/api/*`
-- **Origin**: 选 EC2 origin
+  - 作用：匹配所有后端 API 请求，如 `/api/login`、`/api/holdings`
+- **Origin and origin groups**: 选 EC2 origin（即 8.3 中创建的）
+  - 作用：命中此规则的请求转发到 EC2，而非 S3
 - **Viewer protocol policy**: HTTPS only
+  - 作用：强制 API 请求必须使用 HTTPS，防止敏感数据（Token、密码等）明文传输
+- **Allowed HTTP methods**: 选 `GET, HEAD, OPTIONS, PUT, POST, PATCH, DELETE`
+  - 作用：API 需要支持写操作（POST/PUT/DELETE），默认的 GET, HEAD 不够用
 - **Cache policy**: CachingDisabled（API 不缓存！）
+  - 作用：API 返回的是实时数据，不能缓存。如果缓存了，用户看到的可能是过期的账户数据
 - **Origin request policy**: AllViewer
+  - 作用：将用户请求的所有 Header（包括 `Authorization: Bearer <token>`）原样转发给 EC2，否则后端收不到登录凭证，所有需要鉴权的接口都会 401
+
+点击 **Save changes**
 
 ### 8.5 配置 SPA 路由（前端）
 
-Distribution → Error pages → Create custom error response
+**作用**：解决 React Router 单页应用的直接访问问题。
 
-- HTTP error code: 403 → Response page path: `/index.html` → HTTP response code: 200
-- HTTP error code: 404 → Response page path: `/index.html` → HTTP response code: 200
+当用户直接在浏览器地址栏输入 `https://d2hoqnqufe8qq0.cloudfront.net/holdings`（例：`https://d2xxxxxxxxxxxx.cloudfront.net/holdings`）时：
+- CloudFront 去 S3 找 `/holdings` 这个文件 → S3 不存在 → 返回 403/404
+- 但实际上 `/holdings` 是 React Router 的前端路由，应该由 `index.html` 处理
 
-> 这是因为 React Router 的前端路由（如 `/holdings`）直接访问会被 S3 返回 403/404，需要重定向到 `index.html`
+配置此规则后，CloudFront 会把所有 403/404 响应替换为返回 `index.html`，React Router 再接管路由解析。
+
+Distribution → **Error pages** 标签页 → **Create custom error response**
+
+每条规则按以下步骤配置（403 和 404 各需创建一次）：
+
+1. **HTTP error code**：选 `403: Forbidden`（第二次选 `404`）
+2. **Error caching minimum TTL**：保持默认 `10`（或填 `0` 避免错误被缓存）
+3. **Customize error response**：选 **Yes**（选 Yes 后才会出现下方两个字段）
+4. **Response page path**：填 `/index.html`
+5. **HTTP response code**：选 `200`
+6. 点击 **Save changes**，然后重复上述步骤创建 404 规则
+
+修改我成之后的规则如下：
+| HTTP error code | Response page path | HTTP response code |
+| --------------- | ------------------ | ------------------ |
+| 403             | `/index.html`      | 200                |
+| 404             | `/index.html`      | 200                |
+
 
 ### 8.6 记录 CloudFront 信息
 
-- **Distribution domain name**（如 `d1abc123xyz.cloudfront.net`）：这就是你的公网 HTTPS 地址
-- **Distribution ID**：后面 GitHub Actions 刷新缓存要用
+创建完成后，在 Distribution 详情页记下以下两个值，后续步骤会用到：
+
+- **Distribution domain name**（如 `d2hoqnqufe8qq0.cloudfront.net`，例：`d2xxxxxxxxxxxx.cloudfront.net`）
+  - 这是你的公网 HTTPS 访问地址，第九步配置前端 API 地址时要用
+- **Distribution ID**（如 `EXXXXXXXXXXXX`）,在 AWS console 的 CloudFront 页面，Distribution 列表中，ID 列显示的就是 Distribution ID
+   这个 ID 在 GitHub Actions 部署前端后需要用来刷新 CloudFront 缓存，否则用户看到的还是旧版本
+  - GitHub Actions 部署前端后需要用它来刷新 CloudFront 缓存，否则用户看到的还是旧版本
 
 ---
 
@@ -364,7 +581,8 @@ Distribution → Error pages → Create custom error response
 在 `frontend/` 目录创建 `.env.production`：
 
 ```bash
-VITE_API_BASE_URL=https://d1abc123xyz.cloudfront.net
+vim .env.production &&
+VITE_API_BASE_URL=https://d2hoqnqufe8qq0.cloudfront.net  # 例：d2xxxxxxxxxxxx.cloudfront.net
 ```
 
 （把域名换成你实际的 CloudFront 域名）
@@ -377,211 +595,145 @@ VITE_API_BASE_URL=https://d1abc123xyz.cloudfront.net
 
 ### 10.1 配置 GitHub Secrets
 
-GitHub 仓库 → Settings → Secrets and variables → Actions → New repository secret
+GitHub 仓库 → Settings → Secrets and variables → Actions → New repository secret，
+页面上两个输入框：
+上面的小输入框填 Secret 名称，如 AWS_ACCESS_KEY_ID
+下面的大输入框填对应的值，添加以下 Secrets： 如 abcxyz1234567890
 
 | Secret 名称               | 值                                           |
 | ----------------------- | ------------------------------------------- |
 | `AWS_ACCESS_KEY_ID`     | IAM 用户的 Access Key ID                       |
 | `AWS_SECRET_ACCESS_KEY` | IAM 用户的 Secret Access Key                   |
-| `AWS_REGION`            | `us-east-1`                                 |
-| `ECR_REGISTRY`          | `123456789.dkr.ecr.us-east-1.amazonaws.com` |
-| `S3_BUCKET`             | `smart-invest-frontend-prod`                |
-| `CF_DISTRIBUTION_ID`    | CloudFront Distribution ID                  |
-| `EC2_HOST`              | EC2 公网 IP（如 `54.12.34.56`）                  |
-| `EC2_SSH_KEY`           | `smart-invest-key.pem` 的完整内容（cat 出来复制）      |
-| `DB_PASSWORD`           | 你设置的数据库密码                                   |
-| `JWT_SECRET`            | 你设置的 JWT 密钥                                 |
+| `FRONTEND_BUCKET`       | `smart-invest-frontend-service-prod-bucket-name`    |
+| `CF_DISTRIBUTION_ID`    | CloudFront 页面 → Distributions 列表 → ID 列    |
+| `API_BASE_URL`          | CloudFront 域名，如 `https://d2hoqnqufe8qq0.cloudfront.net`（例：`https://d2xxxxxxxxxxxx.cloudfront.net`） |
+| `EC2_HOST`              | EC2 公网 IP（如 `<YOUR_EC2_PUBLIC_IP>`，例：`13.229.181.210`）                  |
+| `EC2_SSH_KEY`           | `smart-invest-ec2-keypair.pem` 的完整内容，用以下命令直接复制到剪贴板：`cat ~/.ssh/smart-invest-ec2-keypair.pem | pbcopy ` |
 
-### 10.2 前端 CI/CD
 
-创建 `.github/workflows/deploy-frontend.yml`：
+>  MAC OS zsh 中直接 cat ~/.ssh/smart-invest-ec2-keypair.pem 的话，zsh会在输出字符的末尾添加一个 %表示文件末尾没有换行符，
+   所以推荐用 `cat ~/.ssh/smart-invest-ec2-keypair.pem | pbcopy` 复制到剪贴板。
+> `DB_PASSWORD` 和 `JWT_SECRET` 已存在于 EC2 的 `~/smart-invest/.env` 文件中，**不需要**加入 GitHub Secrets。
+> `ECR_REGISTRY` 由 CD 流程中的 `amazon-ecr-login` Action 自动获取，**不需要**手动填写。
+> `EC2_INSTANCE_ID` 是 SSM 部署方式才需要，当前采用 SSH 部署，**不需要**此 Secret。
 
-```yaml
-name: Deploy Frontend
-
-on:
-  push:
-    branches: [master]
-    paths:
-      - 'frontend/**'
-      - '.github/workflows/deploy-frontend.yml'
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Build frontend
-        working-directory: frontend
-        run: |
-          npm ci
-          npm run build
-        env:
-          VITE_API_BASE_URL: https://${{ secrets.CF_DISTRIBUTION_DOMAIN }}
-
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
-
-      - name: Upload to S3
-        run: aws s3 sync frontend/dist s3://${{ secrets.S3_BUCKET }} --delete
-
-      - name: Invalidate CloudFront cache
-        run: |
-          aws cloudfront create-invalidation \
-            --distribution-id ${{ secrets.CF_DISTRIBUTION_ID }} \
-            --paths "/*"
+在本机终端执行以下命令获取存在于 AWS Secrets Manager 中的 JWT_SECRET 的值（同样的命令也可以获取 DB_PASSWORD）：
+```bash
+aws secretsmanager get-secret-value \
+  --secret-id smart-invest/prod/jwt-secret \
+  --region ap-southeast-1 \
+  --query SecretString \
+  --output text
 ```
 
-> **注意**：把 `CF_DISTRIBUTION_DOMAIN` 也加到 GitHub Secrets 里（CloudFront 域名，如 `d1abc123xyz.cloudfront.net`）
+### 10.2 用 Github Actions 部署前的检查
+1.EC2 上已经安装了 Docker 和 Docker Compose
+2.EC2 上已经有 ~/smart-invest/docker-compose.yml 和 .env 文件
+3.EC2 的 Security Group 已开放相应端口
+4.所有 GitHub Secrets 已填写完毕
 
-### 10.3 后端 CI/CD
 
-创建 `.github/workflows/deploy-backend.yml`：
 
-```yaml
-name: Deploy Backend
+### 10.3 GIthub Action 的 CI & CD 配置文件
 
-on:
-  push:
-    branches: [master]
-    paths:
-      - 'backend/**'
-      - 'Dockerfile'
-      - '.github/workflows/deploy-backend.yml'
+前后端 CI
+见本工程代码  `.github/workflows/ci.yml`
+前后端 CD
+见本工程代码 `.github/workflows/cd.yml`：
+---
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+## 第十一步：首次部署
 
-      - uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: 'maven'
+说明：
+GitHub Actions 会自动完成：
+1. 构建 JAR → 打包 Docker 镜像 → 推送到 ECR
+2. SSH 进 EC2 → 拉取新镜像 → `docker compose up -d app`
+3. npm build 前端 → 同步到 S3 → 刷新 CloudFront 缓存
 
-      - name: Build JAR
-        working-directory: backend
-        run: mvn package -DskipTests
+(!!！注：如果数据库部署失败，这个命令 docker compose down -v 可以删除容器和挂载卷卷，也就是删除数据库数据所在卷，慎用。）
+在 GitHub 仓库 → **Actions** 标签页查看执行进度和日志。
 
-      - uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
 
-      - name: Login to ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
+### 方式一：通过 GitHub Actions 部署（推荐）
 
-      - name: Build and push Docker image
-        env:
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-          IMAGE_TAG: ${{ github.sha }}
-        run: |
-          docker build -f backend/Dockerfile -t $ECR_REGISTRY/smart-invest:$IMAGE_TAG backend/
-          docker push $ECR_REGISTRY/smart-invest:$IMAGE_TAG
-          # 也打一个 latest 标签
-          docker tag $ECR_REGISTRY/smart-invest:$IMAGE_TAG $ECR_REGISTRY/smart-invest:latest
-          docker push $ECR_REGISTRY/smart-invest:latest
+1. 手动点击 Actions 的 workflow:
+登录 github, 点击 Actions 标签页，确认 CI（ci.yml中定义的名称） 和 CD(cd.yml中定义的名称） 已经出现在左上角的菜单中，
+说明 GitHub Actions 已正确识别到 ci.yml 和 cd.yml 配置文件。ci.yml 和 cd.yml 配置文件中配置了允许手动触发。
+-> CI -> Run workflow -> Use workflow from: Branch:master -> Run workflow button -> CI 手动触发完成；
+-> CD -> Run workflow -> Use workflow from: Branch:master -> Run workflow button -> CD 手动触发完成；
 
-      - name: Deploy to EC2
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_KEY }}
-          envs: ECR_REGISTRY,IMAGE_TAG
-          script: |
-            # 登录 ECR（EC2 有 IAM role，直接用）
-            aws ecr get-login-password --region us-east-1 \
-              | docker login --username AWS --password-stdin $ECR_REGISTRY
+一切完成后，
+访问 `https://d2hoqnqufe8qq0.cloudfront.net`（例：`https://d2xxxxxxxxxxxx.cloudfront.net`）验证部署成功。
 
-            # 拉取新镜像
-            docker pull $ECR_REGISTRY/smart-invest:$IMAGE_TAG
+2. 或者遵循CI & CD最佳实践， 放开 ci.yml 和 cd.yml 中的注释，应用 github repository 的PR 或 push 等动作来自动触发
+（按照规范 CI & CD 流程的话，
+根据代码 .github/workflows/ci.yml 中的配置 提 pull request 【注意不是 push】到 代码到 `main` 分支，即可触发 CI 流程自动执行；
+根据代码 .github/workflows/cd.yml 中的配置,代码被合并到 main 后，会触发 CD 流程会自动执行，直接完成部署。
+但是 ci.yml 和 cd.yml 中的自动触发条件我临时注释掉了，避免提代码就触发重新部署。
+）
 
-            # 更新 .env 里的 IMAGE_TAG
-            cd ~/smart-invest
-            sed -i "s/^IMAGE_TAG=.*/IMAGE_TAG=$IMAGE_TAG/" .env
-
-            # 重启 app 容器（不重启 postgres）
-            docker compose up -d app
-
-            # 清理旧镜像（节省磁盘）
-            docker image prune -f
-        env:
-          ECR_REGISTRY: ${{ secrets.ECR_REGISTRY }}
-          IMAGE_TAG: ${{ github.sha }}
+```bash
+git push origin main
 ```
+
+一切完成后，
+访问 `https://d2hoqnqufe8qq0.cloudfront.net`（例：`https://d2xxxxxxxxxxxx.cloudfront.net`）验证部署成功。
+
+
 
 ---
 
-## 第十一步：第一次手动部署（验证流程）
+### 方式二：手动部署（可用于排查问题）
 
-在本地先执行一次完整流程，确认配置正确：
+如果 GitHub Actions 部署失败，可本地手动执行以下命令逐步排查：
 
 ```bash
-# 1. 打包后端 JAR
-cd backend && mvn package -DskipTests
+# 1. 打包后端 JAR（在项目根目录执行）
+cd backend && mvn package -DskipTests && cd ..
 
-# 2. 构建 Docker 镜像
-cd .. # 回到项目根
-docker build -f backend/Dockerfile -t smart-invest:test backend/
+# 2. 登录 ECR
+aws ecr get-login-password --region ap-southeast-1 \
+  | docker login --username AWS --password-stdin <YOUR_AWS_ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com  # 例：123456789012
 
-# 3. 登录 ECR
-aws ecr get-login-password --region us-east-1 \
-  | docker login --username AWS --password-stdin 123456789.dkr.ecr.us-east-1.amazonaws.com
+# 3. 构建并推送 Docker 镜像
+docker build -f backend/Dockerfile -t smart-invest:latest backend/
+docker tag smart-invest:latest <YOUR_AWS_ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com/smart-invest:latest  # 例：123456789012
+docker push <YOUR_AWS_ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com/smart-invest:latest  # 例：123456789012
 
-# 4. 推送镜像
-docker tag smart-invest:test 123456789.dkr.ecr.us-east-1.amazonaws.com/smart-invest:latest
-docker push 123456789.dkr.ecr.us-east-1.amazonaws.com/smart-invest:latest
+# 4. SSH 到 EC2，拉取新镜像并启动服务
+ssh -i ~/.ssh/smart-invest-ec2-keypair.pem ec2-user@<YOUR_EC2_PUBLIC_IP>  # 例：13.229.181.210
 
-# 5. SSH 到 EC2，启动服务
-ssh -i ~/.ssh/smart-invest-key.pem ec2-user@54.12.34.56
+# 进入 EC2 后执行：
 cd ~/smart-invest
-
-# 先登录 ECR
-aws ecr get-login-password --region us-east-1 \
-  | docker login --username AWS --password-stdin 123456789.dkr.ecr.us-east-1.amazonaws.com
-
-# 启动服务
+aws ecr get-login-password --region ap-southeast-1 \
+  | docker login --username AWS --password-stdin <YOUR_AWS_ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com  # 例：123456789012
+docker compose pull app
 docker compose up -d
-
-# 查看日志
 docker compose logs -f app
 ```
 
-后端验证：
+后端验证（EC2 上或本地均可）：
 
 ```bash
-curl http://54.12.34.56:8080/actuator/health
+curl http://<YOUR_EC2_PUBLIC_IP>:8080/actuator/health  # 例：13.229.181.210
 # 期望返回: {"status":"UP"}
 ```
 
-前端部署：
+前端手动部署：
 
 ```bash
-# 本地执行
 cd frontend
-VITE_API_BASE_URL=https://d1abc123xyz.cloudfront.net npm run build
-aws s3 sync dist s3://smart-invest-frontend-prod --delete
+npm run build
+aws s3 sync dist/ s3://smart-invest-frontend-service-prod-bucket-name/ --delete \
+  --cache-control "public, max-age=31536000, immutable"
+aws s3 cp dist/index.html s3://smart-invest-frontend-service-prod-bucket-name/index.html \
+  --cache-control "no-cache"
 aws cloudfront create-invalidation \
-  --distribution-id EXXXXXXXXXXXX \
+  --distribution-id <YOUR_CF_DISTRIBUTION_ID> \  # 例：EXXXXXXXXXXXX
   --paths "/*"
 ```
 
-然后访问 `https://d1abc123xyz.cloudfront.net` 验证。
+然后访问 `https://d2hoqnqufe8qq0.cloudfront.net`（例：`https://d2xxxxxxxxxxxx.cloudfront.net`）验证。
 
 ---
 
@@ -606,6 +758,48 @@ aws cloudfront create-invalidation \
 
 ---
 
+## 如何暂停/关闭 AWS 服务以节省成本
+
+### 推荐做法：只停止 EC2（保留数据，随时恢复）
+
+EC2 停止后不计算实例费用（节省约 $8/月），但 EBS 磁盘仍收费（约 $0.1/月）。S3、CloudFront、ECR 费用极低（合计约 $1/月），可以不关。
+
+```
+AWS Console → EC2 → Instances
+→ 选中你的实例 → Instance state → Stop instance
+```
+
+> **恢复时**：选中实例 → Instance state → Start instance
+> **注意**：重启后 EC2 公网 IP 会变，需要更新 CloudFront EC2 Origin 的域名（EC2 Public IPv4 DNS）
+
+---
+
+### 完全删除（彻底清理，不可恢复）
+
+按顺序操作：
+
+| 步骤 | 操作 |
+|------|------|
+| 1. EC2 | Instance state → **Terminate**（磁盘数据一并删除） |
+| 2. S3 | 先 Empty（清空内容），再 Delete bucket |
+| 3. CloudFront | 先 Disable（等状态变为 Deployed），再 Delete |
+| 4. ECR | 选中所有镜像 Delete，再删除 repository |
+| 5. IAM 用户 | IAM → Users → Delete（可选） |
+
+---
+
+### 各服务费用参考
+
+| 服务 | 月费用 | 停止/删除方式 |
+|------|--------|--------------|
+| EC2 t3.micro | ~$8 | Stop（保留）或 Terminate（删除） |
+| EBS 磁盘（随 EC2） | ~$0.8 | 随 Terminate 一起删除 |
+| S3 | ~$0.02 | 清空后删除 bucket |
+| CloudFront | ~$0.01 | Disable 后删除 distribution |
+| ECR | ~$0.1/GB | 删除镜像和 repository |
+
+---
+
 ## 架构总结
 
 | 组件          | AWS 服务          | 作用                          |
@@ -617,3 +811,4 @@ aws cloudfront create-invalidation \
 | 密钥管理        | Secrets Manager | 存储 DB密码、JWT密钥               |
 | 邮件服务        | SES             | 发送通知邮件                      |
 | CI/CD       | GitHub Actions  | 自动构建和部署                     |
+
