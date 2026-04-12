@@ -30,7 +30,22 @@ export default function SmartInvestHomePage() {
     <PageLayout>
       <div className="flex items-center justify-between px-4 py-3 border-b border-si-border">
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-si-red rounded" />
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="32" height="32" rx="8" fill="url(#logoGrad)"/>
+            {/* Bar chart bars */}
+            <rect x="6" y="18" width="4" height="8" rx="1.5" fill="white" fillOpacity="0.6"/>
+            <rect x="12" y="13" width="4" height="13" rx="1.5" fill="white" fillOpacity="0.8"/>
+            <rect x="18" y="9" width="4" height="17" rx="1.5" fill="white"/>
+            {/* Upward trend arrow */}
+            <polyline points="6,17 12,12 18,8 26,5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fillOpacity="0"/>
+            <polyline points="22,5 26,5 26,9" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fillOpacity="0"/>
+            <defs>
+              <linearGradient id="logoGrad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#E8341A"/>
+                <stop offset="100%" stopColor="#FF7043"/>
+              </linearGradient>
+            </defs>
+          </svg>
           <span className="font-bold text-si-dark text-sm">Smart Invest</span>
         </div>
         <div className="flex items-center gap-3">

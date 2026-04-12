@@ -36,7 +36,20 @@ export default function LoginPage() {
     <div className="relative min-h-screen flex flex-col px-6 bg-white">
       {/* Top bar: logo left, lang toggle right */}
       <div className="flex items-center justify-between pt-5">
-        <div className="w-10 h-10 bg-si-red rounded-lg shadow-md" />
+        <svg width="52" height="52" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect width="32" height="32" rx="8" fill="url(#loginLogoGrad)"/>
+            <rect x="6" y="18" width="4" height="8" rx="1.5" fill="white" fillOpacity="0.6"/>
+            <rect x="12" y="13" width="4" height="13" rx="1.5" fill="white" fillOpacity="0.8"/>
+            <rect x="18" y="9" width="4" height="17" rx="1.5" fill="white"/>
+            <polyline points="6,17 12,12 18,8 26,5" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            <polyline points="22,5 26,5 26,9" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+            <defs>
+              <linearGradient id="loginLogoGrad" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stopColor="#E8341A"/>
+                <stop offset="100%" stopColor="#FF7043"/>
+              </linearGradient>
+            </defs>
+          </svg>
         <button
           onClick={toggleLang}
           className="text-xs font-bold px-3 py-1 rounded-full bg-gradient-to-r from-si-red to-orange-400 text-white shadow hover:opacity-90 transition-opacity"
