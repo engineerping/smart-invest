@@ -257,20 +257,49 @@ docker --version   # 验证
 ```bash
 # 在本地执行（不是 EC2 上）
 
-# 存储数据库密码
+# ⚠️ 注意：当前工程实际上不从 Secrets Manager 中读取 DB_PASSWORD 和 JWT_SECRET。
+# 核心原因：为节省成本，数据库采用自建 PostgreSQL 容器而非 AWS RDS。
+# PostgreSQL 容器启动时需要 DB_PASSWORD，但容器本身无法调用 Secrets Manager API，
+# 只能从 docker-compose 环境变量（即 EC2 的 ~/.env 文件）读取。
+# 为避免同一份密码在两处维护（.env 一份、Secrets Manager 一份），
+# 决定让 Spring Boot 和 PostgreSQL 容器统一从 EC2 的 ~/.env 文件取值。
+# Secrets Manager 在此架构下仅作为安全保险箱——存一份备份，忘记密码时可随时手动取回。
+# 若未来升级为 AWS RDS，则可让 Spring Boot 直接从 Secrets Manager 取值，.env 中不再存明文密码。
+
+# AWS Secrets Manager存储：
+# 在本机终端向 AWS Secrets Manager 中存储数据库密码
 aws secretsmanager create-secret \
   --name "smart-invest/prod/db-password" \
   --secret-string "<YOUR_DB_PASSWORD>" \  # 例：MyStr0ngPassw0rd!
   --region ap-southeast-1
 
-# 存储 JWT Secret（生成一个随机强密码）
+# 在本机终端向 AWS Secrets Manager 中存储 JWT Secret（生成一个随机强密码）
 aws secretsmanager create-secret \
   --name "smart-invest/prod/jwt-secret" \
-  --secret-string "$(openssl rand -base64 64)" \
+  --secret-string "$(openssl rand -hex 32)" \
   --region ap-southeast-1
 ```
 
-> 记下你设置的数据库密码，第五步要用。
+> 记下你设置的数据库密码 和 JWT_SECRET，下面第五步要用。
+
+# AWS Secrets Manager读取： 
+# 在本机终端执读取 AWS Secrets Manager 中的 JWT_SECRET 的值：
+```bash
+aws secretsmanager get-secret-value \
+  --secret-id smart-invest/prod/db-password \
+  --region ap-southeast-1 \
+  --query SecretString \
+  --output text
+```
+
+# 在本机终端执读取 AWS Secrets Manager 中的 JWT_SECRET 的值：
+```bash
+aws secretsmanager get-secret-value \
+  --secret-id smart-invest/prod/jwt-secret \
+  --region ap-southeast-1 \
+  --query SecretString \
+  --output text
+```
 
 ---
 
@@ -285,8 +314,8 @@ mkdir ~/smart-invest && cd ~/smart-invest
 
 # 创建 .env 文件（存运行时环境变量）
 cat > .env << 'EOF'
-DB_PASSWORD=smart-invest/prod/db-password
-JWT_SECRET=smart-invest/prod/jwt-secret
+DB_PASSWORD="<YOUR_DB_PASSWORD>" # 例：MyStr0ngPassw0rd!，可以去 Secrets Manager 取之前存的密码
+JWT_SECRET= "<YOUR_JWT_SECRET>" # 例：从 Secrets Manager 取的 JWT_SECRET，格式是一个随机的长字符串，如 "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
 AWS_REGION=ap-southeast-1
 ECR_REGISTRY=<YOUR_AWS_ACCOUNT_ID>.dkr.ecr.ap-southeast-1.amazonaws.com  # 例：123456789012
 IMAGE_TAG=latest
@@ -610,21 +639,23 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → New reposit
 | `EC2_HOST`              | EC2 公网 IP（如 `<YOUR_EC2_PUBLIC_IP>`，例：`13.229.181.210`）                  |
 | `EC2_SSH_KEY`           | `smart-invest-ec2-keypair.pem` 的完整内容，用以下命令直接复制到剪贴板：`cat ~/.ssh/smart-invest-ec2-keypair.pem | pbcopy ` |
 
-
 >  MAC OS zsh 中直接 cat ~/.ssh/smart-invest-ec2-keypair.pem 的话，zsh会在输出字符的末尾添加一个 %表示文件末尾没有换行符，
    所以推荐用 `cat ~/.ssh/smart-invest-ec2-keypair.pem | pbcopy` 复制到剪贴板。
-> `DB_PASSWORD` 和 `JWT_SECRET` 已存在于 EC2 的 `~/smart-invest/.env` 文件中，**不需要**加入 GitHub Secrets。
+>  EC2_HOST 是 EC2 的公网 IP 地址，在没有配置弹性IP（Elastic IP） 的情况下，EC2 重启后 IP 会变，所以如果 EC2 重启了，记得在 github 中更新这个 EC2_HOST Secret。
+
+> **可选：为 EC2 配置弹性 IP（Elastic IP），使公网 IP 固定不变：**
+> 1. 进入 AWS Console → EC2 → 左侧菜单 → **弹性 IP（Elastic IPs）**
+> 2. 点击右上角 **"分配弹性 IP 地址（Allocate Elastic IP address）"** → 保持默认 → 点击 **"分配"**
+> 3. 选中刚分配的弹性 IP → 点击 **"操作（Actions）→ 关联弹性 IP 地址（Associate Elastic IP address）"**
+> 4. 资源类型选 **实例（Instance）**，选择你的 EC2 实例 → 点击 **"关联"**
+> 5. 将新的弹性 IP 更新到 GitHub Secrets 的 `EC2_HOST` 中
+
+> 注意：弹性 IP 关联到**运行中**的实例是免费的；若实例停止或弹性 IP 未关联任何实例，AWS 会收取少量费用（约 $0.005/小时，即 30 天为3.6$），不用时记得释放。
+
+> `DB_PASSWORD` 和 `JWT_SECRET` 已存在于 EC2 的 `~/smart-invest/.env` 文件中，备份在 AWS Secrets Manager  中，**不需要**加入 GitHub Secrets。
 > `ECR_REGISTRY` 由 CD 流程中的 `amazon-ecr-login` Action 自动获取，**不需要**手动填写。
 > `EC2_INSTANCE_ID` 是 SSM 部署方式才需要，当前采用 SSH 部署，**不需要**此 Secret。
 
-在本机终端执行以下命令获取存在于 AWS Secrets Manager 中的 JWT_SECRET 的值（同样的命令也可以获取 DB_PASSWORD）：
-```bash
-aws secretsmanager get-secret-value \
-  --secret-id smart-invest/prod/jwt-secret \
-  --region ap-southeast-1 \
-  --query SecretString \
-  --output text
-```
 
 ### 10.2 用 Github Actions 部署前的检查
 1.EC2 上已经安装了 Docker 和 Docker Compose
