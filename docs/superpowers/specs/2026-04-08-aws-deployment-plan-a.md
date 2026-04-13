@@ -803,7 +803,7 @@ aws cloudfront create-invalidation \
 
 ## 成本监控（必做）
 
-1. AWS Console → **Billing** → **Budgets** → Create budget
+1. AWS Console → **Billing and Cost Management** → **Budgets** → Create budget
 2. 选 **Monthly cost budget**，设置 $15/月报警
 3. 邮件通知：到达 80% 时发邮件提醒
 
