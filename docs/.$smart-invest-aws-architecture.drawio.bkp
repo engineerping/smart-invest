@@ -1,0 +1,384 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-04-14T00:00:00.000Z" version="21.0.2">
+  <diagram id="smart-invest-aws" name="Smart-Invest AWS Architecture">
+    <mxGraphModel dx="1422" dy="762" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ================================================ -->
+        <!-- TITLE                                            -->
+        <!-- ================================================ -->
+        <mxCell id="title" value="Smart-Invest  ·  AWS EKS Financial-Grade Architecture"
+          style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;
+                 whiteSpace=wrap;rounded=0;fontSize=16;fontStyle=1;fontColor=#232F3E;"
+          vertex="1" parent="1">
+          <mxGeometry x="50" y="8" width="1000" height="28" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================ -->
+        <!-- VPC BOUNDARY (dashed)                           -->
+        <!-- ================================================ -->
+        <mxCell id="vpc_bg" value="VPC  10.0.0.0/16  ·  Private Subnets (3 AZs)"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#546E7A;
+                 strokeWidth=2;dashed=1;dashPattern=8 4;verticalAlign=top;fontSize=9;
+                 fontStyle=1;fontColor=#546E7A;"
+          vertex="1" parent="1">
+          <mxGeometry x="6" y="155" width="1090" height="258" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================ -->
+        <!-- TIER BACKGROUNDS                                 -->
+        <!-- ================================================ -->
+
+        <!-- Edge / CDN Tier -->
+        <mxCell id="bg_edge" value=""
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FFF8E1;strokeColor=#FF8F00;
+                 strokeWidth=2;opacity=70;"
+          vertex="1" parent="1">
+          <mxGeometry x="8" y="40" width="1086" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl_edge" value="Edge / CDN · DNS"
+          style="text;html=1;strokeColor=none;fillColor=none;align=left;
+                 fontSize=9;fontStyle=1;fontColor=#E65100;"
+          vertex="1" parent="1">
+          <mxGeometry x="16" y="42" width="160" height="16" as="geometry" />
+        </mxCell>
+
+        <!-- EKS Compute Tier -->
+        <mxCell id="bg_eks" value=""
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E3F2FD;strokeColor=#1565C0;
+                 strokeWidth=2;opacity=70;"
+          vertex="1" parent="1">
+          <mxGeometry x="8" y="162" width="1086" height="162" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl_eks" value="EKS Cluster  ·  Kubernetes 1.30  ·  Multi-AZ  ·  HPA + Karpenter  ·  Network Policy (Calico)  ·  IRSA"
+          style="text;html=1;strokeColor=none;fillColor=none;align=left;
+                 fontSize=9;fontStyle=1;fontColor=#0D47A1;"
+          vertex="1" parent="1">
+          <mxGeometry x="16" y="164" width="750" height="16" as="geometry" />
+        </mxCell>
+
+        <!-- Data Tier -->
+        <mxCell id="bg_data" value=""
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#E8F5E9;strokeColor=#2E7D32;
+                 strokeWidth=2;opacity=70;"
+          vertex="1" parent="1">
+          <mxGeometry x="8" y="332" width="1086" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl_data" value="Data Tier  ·  Private Subnet"
+          style="text;html=1;strokeColor=none;fillColor=none;align=left;
+                 fontSize=9;fontStyle=1;fontColor=#1B5E20;"
+          vertex="1" parent="1">
+          <mxGeometry x="16" y="334" width="180" height="16" as="geometry" />
+        </mxCell>
+
+        <!-- Security / Ops Tier -->
+        <mxCell id="bg_ops" value=""
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#F3E5F5;strokeColor=#6A1B9A;
+                 strokeWidth=2;opacity=70;"
+          vertex="1" parent="1">
+          <mxGeometry x="8" y="418" width="1086" height="78" as="geometry" />
+        </mxCell>
+        <mxCell id="lbl_ops" value="Security · Compliance · Observability · CI/CD"
+          style="text;html=1;strokeColor=none;fillColor=none;align=left;
+                 fontSize=9;fontStyle=1;fontColor=#4A148C;"
+          vertex="1" parent="1">
+          <mxGeometry x="16" y="420" width="280" height="16" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================ -->
+        <!-- EDGE TIER SERVICES                              -->
+        <!-- ================================================ -->
+
+        <!-- Internet / Users -->
+        <mxCell id="users" value="Internet"
+          style="shape=cloud;whiteSpace=wrap;html=1;fillColor=#CFE2FF;strokeColor=#5B9BD5;
+                 fontSize=10;fontStyle=1;fontColor=#1A237E;"
+          vertex="1" parent="1">
+          <mxGeometry x="18" y="56" width="88" height="72" as="geometry" />
+        </mxCell>
+
+        <!-- Route 53 -->
+        <mxCell id="route53" value="Route 53&#xa;DNSSEC"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#E37700;
+                 fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="138" y="70" width="110" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- CloudFront + WAF -->
+        <mxCell id="cloudfront" value="CloudFront&#xa;WAF · Shield Standard"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#E37700;
+                 fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="284" y="55" width="162" height="78" as="geometry" />
+        </mxCell>
+
+        <!-- S3 React SPA -->
+        <mxCell id="s3" value="S3 (OAC)&#xa;React SPA"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7AA116;strokeColor=#5D7E0D;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="498" y="55" width="130" height="48" as="geometry" />
+        </mxCell>
+
+        <!-- ALB -->
+        <mxCell id="alb" value="ALB  (HTTPS · SSL Termination)"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#FF9900;strokeColor=#E37700;
+                 fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="498" y="112" width="220" height="32" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================ -->
+        <!-- EKS TIER — MICROSERVICES                        -->
+        <!-- ================================================ -->
+
+        <!-- user-service -->
+        <mxCell id="svc_user" value="user-service&#xa;Spring Boot&#xa;/api/v1/users"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1976D2;strokeColor=#0D47A1;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="20" y="184" width="138" height="118" as="geometry" />
+        </mxCell>
+
+        <!-- fund-service -->
+        <mxCell id="svc_fund" value="fund-service&#xa;Spring Boot&#xa;/api/v1/funds"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1976D2;strokeColor=#0D47A1;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="176" y="184" width="138" height="118" as="geometry" />
+        </mxCell>
+
+        <!-- order-service -->
+        <mxCell id="svc_order" value="order-service&#xa;Spring Boot&#xa;/api/v1/orders"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1976D2;strokeColor=#0D47A1;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="332" y="184" width="142" height="118" as="geometry" />
+        </mxCell>
+
+        <!-- portfolio-service -->
+        <mxCell id="svc_portfolio" value="portfolio-service&#xa;Spring Boot&#xa;/api/v1/portfolio"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1976D2;strokeColor=#0D47A1;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="492" y="184" width="148" height="118" as="geometry" />
+        </mxCell>
+
+        <!-- plan-service -->
+        <mxCell id="svc_plan" value="plan-service&#xa;Spring Boot&#xa;/api/v1/plans"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#1976D2;strokeColor=#0D47A1;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="658" y="184" width="138" height="118" as="geometry" />
+        </mxCell>
+
+        <!-- IRSA + Secrets Store CSI -->
+        <mxCell id="irsa" value="IRSA + Secrets Store CSI Driver"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7B1FA2;strokeColor=#4A0072;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="814" y="184" width="272" height="52" as="geometry" />
+        </mxCell>
+
+        <!-- ArgoCD GitOps -->
+        <mxCell id="argocd" value="ArgoCD GitOps  ·  Rolling Update  ·  Zero-Downtime"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#00796B;strokeColor=#004D40;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="814" y="250" width="272" height="52" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================ -->
+        <!-- DATA TIER                                        -->
+        <!-- ================================================ -->
+
+        <!-- RDS Proxy -->
+        <mxCell id="rds_proxy" value="RDS Proxy&#xa;Connection Pool"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#388E3C;strokeColor=#1B5E20;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="74" y="346" width="138" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Aurora PostgreSQL -->
+        <mxCell id="aurora" value="Aurora PostgreSQL&#xa;Multi-AZ · Writer + 2 Readers · Global DB (DR)"
+          style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#388E3C;strokeColor=#1B5E20;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;boundedLbl=1;backgroundOutline=1;size=8;"
+          vertex="1" parent="1">
+          <mxGeometry x="240" y="342" width="268" height="58" as="geometry" />
+        </mxCell>
+
+        <!-- ElastiCache Redis -->
+        <mxCell id="redis" value="ElastiCache Redis  ·  Multi-AZ  ·  Session Cache"
+          style="shape=cylinder3;whiteSpace=wrap;html=1;fillColor=#388E3C;strokeColor=#1B5E20;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;boundedLbl=1;backgroundOutline=1;size=8;"
+          vertex="1" parent="1">
+          <mxGeometry x="542" y="342" width="230" height="58" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================ -->
+        <!-- SECURITY / OPS TIER                             -->
+        <!-- ================================================ -->
+
+        <!-- CloudTrail -->
+        <mxCell id="cloudtrail" value="CloudTrail&#xa;Org · WORM · 7yr"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7B1FA2;strokeColor=#4A0072;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="18" y="432" width="148" height="52" as="geometry" />
+        </mxCell>
+
+        <!-- GuardDuty + Security Hub -->
+        <mxCell id="guardduty" value="GuardDuty&#xa;+ Security Hub"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7B1FA2;strokeColor=#4A0072;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="182" y="432" width="148" height="52" as="geometry" />
+        </mxCell>
+
+        <!-- AWS Config + Inspector -->
+        <mxCell id="config_inspector" value="AWS Config&#xa;+ Inspector (CVE)"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7B1FA2;strokeColor=#4A0072;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="346" y="432" width="148" height="52" as="geometry" />
+        </mxCell>
+
+        <!-- CloudWatch + Prometheus + Grafana + X-Ray -->
+        <mxCell id="cloudwatch" value="CloudWatch · Prometheus&#xa;Grafana · X-Ray Tracing"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#00796B;strokeColor=#004D40;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="510" y="432" width="178" height="52" as="geometry" />
+        </mxCell>
+
+        <!-- KMS + Secrets Manager -->
+        <mxCell id="kms" value="KMS (CMK)&#xa;+ Secrets Manager"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#7B1FA2;strokeColor=#4A0072;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="704" y="432" width="158" height="52" as="geometry" />
+        </mxCell>
+
+        <!-- GitHub Actions + ECR -->
+        <mxCell id="cicd" value="GitHub Actions → ECR&#xa;Image Sign · ArgoCD CD"
+          style="rounded=1;whiteSpace=wrap;html=1;fillColor=#00796B;strokeColor=#004D40;
+                 fontColor=#FFFFFF;fontSize=10;fontStyle=1;"
+          vertex="1" parent="1">
+          <mxGeometry x="878" y="432" width="200" height="52" as="geometry" />
+        </mxCell>
+
+        <!-- ================================================ -->
+        <!-- EDGES / FLOW ARROWS                             -->
+        <!-- ================================================ -->
+
+        <!-- Users → Route53 -->
+        <mxCell id="e1" value=""
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;
+                 exitX=1;exitY=0.5;exitDx=0;exitDy=0;
+                 entryX=0;entryY=0.5;entryDx=0;entryDy=0;
+                 strokeWidth=2;strokeColor=#455A64;"
+          edge="1" source="users" target="route53" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Route53 → CloudFront -->
+        <mxCell id="e2" value=""
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;
+                 exitX=1;exitY=0.5;exitDx=0;exitDy=0;
+                 entryX=0;entryY=0.5;entryDx=0;entryDy=0;
+                 strokeWidth=2;strokeColor=#455A64;"
+          edge="1" source="route53" target="cloudfront" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- CloudFront → S3 (static assets) -->
+        <mxCell id="e3" value="/* (static)"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;
+                 exitX=1;exitY=0.3;exitDx=0;exitDy=0;
+                 entryX=0;entryY=0.5;entryDx=0;entryDy=0;
+                 strokeWidth=2;strokeColor=#7AA116;
+                 fontSize=9;fontColor=#33691E;fontStyle=2;"
+          edge="1" source="cloudfront" target="s3" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- CloudFront → ALB (/api/*) -->
+        <mxCell id="e4" value="/api/*"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;
+                 exitX=1;exitY=0.7;exitDx=0;exitDy=0;
+                 entryX=0;entryY=0.5;entryDx=0;entryDy=0;
+                 strokeWidth=2;strokeColor=#E65100;
+                 fontSize=9;fontColor=#E65100;fontStyle=2;"
+          edge="1" source="cloudfront" target="alb" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ALB → portfolio-service (Ingress controller) -->
+        <mxCell id="e5" value="Ingress"
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;
+                 exitX=0.5;exitY=1;exitDx=0;exitDy=0;
+                 entryX=0.5;entryY=0;entryDx=0;entryDy=0;
+                 strokeWidth=2;strokeColor=#1976D2;
+                 fontSize=9;fontColor=#0D47A1;fontStyle=2;"
+          edge="1" source="alb" target="svc_portfolio" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- user-service → RDS Proxy -->
+        <mxCell id="e6" value=""
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;
+                 exitX=0.5;exitY=1;exitDx=0;exitDy=0;
+                 entryX=0.5;entryY=0;entryDx=0;entryDy=0;
+                 strokeWidth=2;strokeColor=#388E3C;"
+          edge="1" source="svc_user" target="rds_proxy" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- RDS Proxy → Aurora -->
+        <mxCell id="e7" value=""
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;
+                 exitX=1;exitY=0.5;exitDx=0;exitDy=0;
+                 entryX=0;entryY=0.5;entryDx=0;entryDy=0;
+                 strokeWidth=2;strokeColor=#388E3C;"
+          edge="1" source="rds_proxy" target="aurora" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- portfolio-service → ElastiCache Redis -->
+        <mxCell id="e8" value=""
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;
+                 exitX=0.5;exitY=1;exitDx=0;exitDy=0;
+                 entryX=0.5;entryY=0;entryDx=0;entryDy=0;
+                 strokeWidth=2;strokeColor=#388E3C;"
+          edge="1" source="svc_portfolio" target="redis" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- IRSA → KMS + Secrets Manager (dashed) -->
+        <mxCell id="e9" value=""
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;
+                 exitX=0.5;exitY=1;exitDx=0;exitDy=0;
+                 entryX=0.5;entryY=0;entryDx=0;entryDy=0;
+                 strokeWidth=1;strokeColor=#7B1FA2;dashed=1;dashPattern=6 3;"
+          edge="1" source="irsa" target="kms" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- GitHub Actions → ArgoCD (dashed CI/CD flow) -->
+        <mxCell id="e10" value=""
+          style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;
+                 exitX=0.5;exitY=0;exitDx=0;exitDy=0;
+                 entryX=1;entryY=0.5;entryDx=0;entryDy=0;
+                 strokeWidth=1;strokeColor=#00796B;dashed=1;dashPattern=6 3;"
+          edge="1" source="cicd" target="argocd" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
