@@ -57,7 +57,7 @@ Developer (git push)
 3. 勾选 **Provide user access to the AWS Management Console**（可选）
 4. Permissions：选 **Add user to group**，选择 Create group 以创建用户组。
 5. User group name 填 smart-invest-deploy-group，
-  Permissions policies (6/1145) 中，按照以下Policy name 搜索并勾选对应 policy:
+   Permissions policies (6/1145) 中，按照以下Policy name 搜索并勾选对应 policy:
    添加以下托管策略：
    - `AmazonEC2FullAccess`
    - `AmazonS3FullAccess`
@@ -65,7 +65,7 @@ Developer (git push)
    - `AmazonEC2ContainerRegistryFullAccess`
    - `SecretsManagerReadWrite`
    - `AmazonSESFullAccess`
-  最后点击 Create user group
+     最后点击 Create user group
 6. 回到create user界面，在user groups中勾选刚才创建的 smart-investment-deploy-group, 
    将 smart-invest-deploy-user 添加入 smart-investment-deploy-group 这个用户组，点击 Next
 7. 创建完成后点击 Return tousers list, 回到 IAM > Users 页面
@@ -127,8 +127,8 @@ aws ecr create-repository \
     }
   }
 }
-```
 
+```
 ---
 
 ## 第三步：创建 EC2 实例
@@ -154,13 +154,13 @@ AWS Console → EC2 → Security Groups → Create security group
 - Description: Smart Invest backend security group 
 - Inbound rules（入站规则）：
 
-| Type       | Protocol | Port | Source    | 说明                |
-| ---------- | -------- | ---- | --------- | ----------------- |
-| SSH        | TCP      | 22   | My IP     | 只允许你的 IP SSH，（如果本地开了 VPN，则 SSH 连不上，需要将 安全组中 SSH 的Source 临时改为 0.0.0.0/0允许任何 IP）      | 
-| Custom TCP | TCP      | 8080 | 0.0.0.0/0 | CloudFront 转发后端请求 |
+| Type       | Protocol | Port | Source    | 说明                                                                             |
+| ---------- | -------- | ---- | --------- | ------------------------------------------------------------------------------ |
+| SSH        | TCP      | 22   | My IP     | 只允许你的 IP SSH，（如果本地开了 VPN，则 SSH 连不上，需要将 安全组中 SSH 的Source 临时改为 0.0.0.0/0允许任何 IP） |
+| Custom TCP | TCP      | 8080 | 0.0.0.0/0 | CloudFront 转发后端请求                                                              |
 
 > 安全建议：8080 理想情况只对 CloudFront IP 开放，但入门阶段先开 0.0.0.0/0 更简单。
-最后点击右下角 Create security group 创建完成。
+> 最后点击右下角 Create security group 创建完成。
 
 ### 3.3 启动 EC2 实例
 
@@ -183,7 +183,7 @@ AWS Console → EC2 → Launch Instance
     - Create schedule
 - 最后点击右下角的 View all instances.
 - 点击 instance ID 进入实例详情页，等待状态变为 Running 后，
-启动后记下 **Public IPv4 address**（如 `<YOUR_EC2_PUBLIC_IP>`，例：`13.229.181.210`）
+  启动后记下 **Public IPv4 address**（如 `<YOUR_EC2_PUBLIC_IP>`，例：`13.229.181.210`）
 
 ### 3.4 在 EC2 上安装 Docker
 
@@ -252,6 +252,7 @@ docker --version   # 验证
 ---
 
 ## 第四步：在本地执行 aws 命令，将密码 等存入 AWS 上的 Secrets Manager 中（EC2 上也可以执行，但需要先 上在 EC2安装 AWS CLI）
+
 因为本地为 aws-cli 配置了登录 AWS 的凭据（~/.aws/credentials），所以可以在本地直接执行 aws 命令来操作 AWS 资源（比如 Secrets Manager），不需要 SSH 进入 EC2 后再执行。
 
 ```bash
@@ -282,8 +283,10 @@ aws secretsmanager create-secret \
 
 > 记下你设置的数据库密码 和 JWT_SECRET，下面第五步要用。
 
-# AWS Secrets Manager读取： 
+# AWS Secrets Manager读取：
+
 # 在本机终端执读取 AWS Secrets Manager 中的 JWT_SECRET 的值：
+
 ```bash
 aws secretsmanager get-secret-value \
   --secret-id smart-invest/prod/db-password \
@@ -293,6 +296,7 @@ aws secretsmanager get-secret-value \
 ```
 
 # 在本机终端执读取 AWS Secrets Manager 中的 JWT_SECRET 的值：
+
 ```bash
 aws secretsmanager get-secret-value \
   --secret-id smart-invest/prod/jwt-secret \
@@ -444,12 +448,12 @@ CloudFront 边缘节点（全球 CDN）
 
 ### 各段链路安全性分析
 
-| 链路段 | 协议 | 加密方式 | 说明 |
-| ----- | ---- | ------- | ---- |
-| 浏览器 → CloudFront | HTTPS | TLS 1.2/1.3 | CloudFront 自动签发并续期证书，无需手动管理 |
-| CloudFront → S3 | HTTPS | AWS 内部加密 | S3 bucket 设为私有，仅通过 OAC 允许 CloudFront 访问，外部无法直接访问 |
-| CloudFront → EC2 | HTTP | 无（AWS 内部网络） | 走 AWS 数据中心内部网络，与公网物理隔离；EC2 无需安装 SSL 证书 |
-| EC2 → PostgreSQL | TCP | 无（Docker 内部网络） | 数据库端口 5432 未对外暴露，仅容器间通信 |
+| 链路段              | 协议    | 加密方式           | 说明                                               |
+| ---------------- | ----- | -------------- | ------------------------------------------------ |
+| 浏览器 → CloudFront | HTTPS | TLS 1.2/1.3    | CloudFront 自动签发并续期证书，无需手动管理                      |
+| CloudFront → S3  | HTTPS | AWS 内部加密       | S3 bucket 设为私有，仅通过 OAC 允许 CloudFront 访问，外部无法直接访问 |
+| CloudFront → EC2 | HTTP  | 无（AWS 内部网络）    | 走 AWS 数据中心内部网络，与公网物理隔离；EC2 无需安装 SSL 证书           |
+| EC2 → PostgreSQL | TCP   | 无（Docker 内部网络） | 数据库端口 5432 未对外暴露，仅容器间通信                          |
 
 ### 为什么 CloudFront → EC2 用 HTTP 是可接受的？
 
@@ -469,12 +473,15 @@ CloudFront 边缘节点（全球 CDN）
 - **EC2 改为内网 IP + ALB**：EC2 放入私有子网，前面加 Application Load Balancer（ALB）处理 HTTPS 终止，EC2 不暴露公网 IP
 
 ---
+
 开始配置：
 **CloudFront 的作用**：它是整个架构的统一入口。用户只访问一个 HTTPS 域名（`xxxx.cloudfront.net`），CloudFront 根据路径自动决定：请求 `/api/*` 转发给 EC2 后端，其余请求（`/*`）从 S3 获取前端静态文件。这样做的好处是：
-- 前后端使用同一个域名，彻底避免跨域（CORS）问题
-- CloudFront 自动提供 HTTPS，无需自己申请 SSL 证书
-- 前端静态资源在 CloudFront 全球节点缓存，访问更快
 
+- 前后端使用同一个域名，彻底避免跨域（CORS）问题
+
+- CloudFront 自动提供 HTTPS，无需自己申请 SSL 证书
+
+- 前端静态资源在 CloudFront 全球节点缓存，访问更快
 1. AWS Console → **CloudFront** → Create distribution
 
 ### 8.1 配置 S3 Origin（前端）
@@ -569,7 +576,7 @@ Distribution → **Behaviors** 标签页 → **Create behavior**
 
 **作用**：解决 React Router 单页应用的直接访问问题。
 
-当用户直接在浏览器地址栏输入 `https://d2hoqnqufe8qq0.cloudfront.net/holdings`（例：`https://d2xxxxxxxxxxxx.cloudfront.net/holdings`）时：
+当用户直接在浏览器地址栏输入 `https://d2hoqnqufe8qq0.cloudfront.net/holdings` 时：
 - CloudFront 去 S3 找 `/holdings` 这个文件 → S3 不存在 → 返回 403/404
 - 但实际上 `/holdings` 是 React Router 的前端路由，应该由 `index.html` 处理
 
@@ -592,12 +599,11 @@ Distribution → **Error pages** 标签页 → **Create custom error response**
 | 403             | `/index.html`      | 200                |
 | 404             | `/index.html`      | 200                |
 
-
 ### 8.6 记录 CloudFront 信息
 
 创建完成后，在 Distribution 详情页记下以下两个值，后续步骤会用到：
 
-- **Distribution domain name**（如 `d2hoqnqufe8qq0.cloudfront.net`，例：`d2xxxxxxxxxxxx.cloudfront.net`）
+- **Distribution domain name**（如 `d2hoqnqufe8qq0.cloudfront.net`）
   - 这是你的公网 HTTPS 访问地址，第九步配置前端 API 地址时要用
 - **Distribution ID**（如 `EXXXXXXXXXXXX`）,在 AWS console 的 CloudFront 页面，Distribution 列表中，ID 列显示的就是 Distribution ID
    这个 ID 在 GitHub Actions 部署前端后需要用来刷新 CloudFront 缓存，否则用户看到的还是旧版本
@@ -611,7 +617,7 @@ Distribution → **Error pages** 标签页 → **Create custom error response**
 
 ```bash
 vim .env.production &&
-VITE_API_BASE_URL=https://d2hoqnqufe8qq0.cloudfront.net  # 例：d2xxxxxxxxxxxx.cloudfront.net
+VITE_API_BASE_URL=https://d2hoqnqufe8qq0.cloudfront.net
 ```
 
 （把域名换成你实际的 CloudFront 域名）
@@ -629,41 +635,56 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → New reposit
 上面的小输入框填 Secret 名称，如 AWS_ACCESS_KEY_ID
 下面的大输入框填对应的值，添加以下 Secrets： 如 abcxyz1234567890
 
-| Secret 名称               | 值                                           |
-| ----------------------- | ------------------------------------------- |
-| `AWS_ACCESS_KEY_ID`     | IAM 用户的 Access Key ID                       |
-| `AWS_SECRET_ACCESS_KEY` | IAM 用户的 Secret Access Key                   |
-| `FRONTEND_BUCKET`       | `smart-invest-frontend-service-prod-bucket-name`    |
-| `CF_DISTRIBUTION_ID`    | CloudFront 页面 → Distributions 列表 → ID 列    |
+| Secret 名称               | 值                                                                                                  |
+| ----------------------- | -------------------------------------------------------------------------------------------------- |
+| `AWS_ACCESS_KEY_ID`     | IAM 用户的 Access Key ID                                                                              |
+| `AWS_SECRET_ACCESS_KEY` | IAM 用户的 Secret Access Key                                                                          |
+| `FRONTEND_BUCKET`       | `smart-invest-frontend-service-prod-bucket-name`                                                   |
+| `CF_DISTRIBUTION_ID`    | CloudFront 页面 → Distributions 列表 → ID 列                                                            |
 | `API_BASE_URL`          | CloudFront 域名，如 `https://d2hoqnqufe8qq0.cloudfront.net`（例：`https://d2xxxxxxxxxxxx.cloudfront.net`） |
-| `EC2_HOST`              | EC2 公网 IP（如 `<YOUR_EC2_PUBLIC_IP>`，例：`13.229.181.210`）                  |
-| `EC2_SSH_KEY`           | `smart-invest-ec2-keypair.pem` 的完整内容，用以下命令直接复制到剪贴板：`cat ~/.ssh/smart-invest-ec2-keypair.pem | pbcopy ` |
+| `EC2_HOST`              | EC2 公网 IP（如 `<YOUR_EC2_PUBLIC_IP>`，例：`13.229.181.210`）                                             |
+| `EC2_SSH_KEY`           | `smart-invest-ec2-keypair.pem` 的完整内容，用以下命令直接复制到剪贴板：`cat ~/.ssh/smart-invest-ec2-keypair.pem        |
 
->  MAC OS zsh 中直接 cat ~/.ssh/smart-invest-ec2-keypair.pem 的话，zsh会在输出字符的末尾添加一个 %表示文件末尾没有换行符，
-   所以推荐用 `cat ~/.ssh/smart-invest-ec2-keypair.pem | pbcopy` 复制到剪贴板。
->  EC2_HOST 是 EC2 的公网 IP 地址，在没有配置弹性IP（Elastic IP） 的情况下，EC2 重启后 IP 会变，所以如果 EC2 重启了，记得在 github 中更新这个 EC2_HOST Secret。
-
-> **可选：为 EC2 配置弹性 IP（Elastic IP），使公网 IP 固定不变：**
-> 1. 进入 AWS Console → EC2 → 左侧菜单 → **弹性 IP（Elastic IPs）**
-> 2. 点击右上角 **"分配弹性 IP 地址（Allocate Elastic IP address）"** → 保持默认 → 点击 **"分配"**
-> 3. 选中刚分配的弹性 IP → 点击 **"操作（Actions）→ 关联弹性 IP 地址（Associate Elastic IP address）"**
-> 4. 资源类型选 **实例（Instance）**，选择你的 EC2 实例 → 点击 **"关联"**
-> 5. 将新的弹性 IP 更新到 GitHub Secrets 的 `EC2_HOST` 中
-
-> 注意：弹性 IP 关联到**运行中**的实例是免费的；若实例停止或弹性 IP 未关联任何实例，AWS 会收取少量费用（约 $0.005/小时，即 30 天为3.6$），不用时记得释放。
-
+>  !!! MAC OS zsh 中直接 cat ~/.ssh/smart-invest-ec2-keypair.pem 的话，zsh会在输出字符的末尾添加一个 %表示文件末尾没有换行符，
+>    所以推荐用 `cat ~/.ssh/smart-invest-ec2-keypair.pem | pbcopy` 复制到剪贴板。
 > `DB_PASSWORD` 和 `JWT_SECRET` 已存在于 EC2 的 `~/smart-invest/.env` 文件中，备份在 AWS Secrets Manager  中，**不需要**加入 GitHub Secrets。
 > `ECR_REGISTRY` 由 CD 流程中的 `amazon-ecr-login` Action 自动获取，**不需要**手动填写。
 > `EC2_INSTANCE_ID` 是 SSM 部署方式才需要，当前采用 SSH 部署，**不需要**此 Secret。
 
+>  EC2_HOST 是 EC2 的公网 IP 地址，在没有配置弹性IP（Elastic IP） 的情况下，EC2 重启后 IP 会变，
+>  
+>  所以每次重启需要改两处：
+
+需要更新的地方	改什么值
+| 配置位置                | 需要更新的值               |
+|-------------------------|----------------------------|
+| GitHub Secret `EC2_HOST` | 新的 Public IPv4 address   |
+| CloudFront Origin Domain Name | 新的 Public IPv4 DNS |
+配了 弹性 IP (Elastic IP) 之后, 弹性IP 固定不变，这两处就都不需要改了。
+>  。
+
+> **可选：每次重启 EC2 Instance,其公网 IP 都会变， 为 EC2 配置弹性 IP（Elastic IP），使公网 IP 固定不变：**
+> 
+> 1. 进入 AWS Console → EC2 → 左侧菜单 → **弹性 IP（Elastic IPs）**
+> 2. 点击右上角 **"分配弹性 IP 地址（Allocate Elastic IP address）"** → 保持默认 → 点击 **"分配"**
+> 3. 选中刚分配的弹性 IP → 点击 **"操作（Actions）→ 关联弹性 IP 地址（Associate Elastic IP address）"**
+> 4. 资源类型选 **实例（Instance）**，选择你的 EC2 实例 → 点击 **"关联"**
+> 5. 将新的弹性 IP 更新到 GitHub Secrets 的 `EC2_HOST` 中。例：46.137.250.243
+> 6. 去 EC2 控制台找到 ELastic IPs 点进去找打46.137.250.243 对应的 Public DNS，例：ec2-46-137-250-243.ap-southeast-1.compute.amazonaws.com
+     然后去 CloudFront → Distributions （点击 Distribution ID）→ Origins → (选中Origin type 为 EC2的 origin) → Edit ：`填入弹性 IP 的 Public DNS
+> 7. 一旦给 EC2 的Public IPv4 address关联了弹性 IP 后，EC2 的 Public IPv4 address 就会变成这个弹性 IP，SSH 登录的时候也用这个 弹性 IP。
+
+> 注意：AWS免费套餐每月包含750小时的公有IPv4地址使用时间，但这仅适用于附加到EC2实例的公有IP
+> 其他服务（如NAT网关、负载均衡器）使用的弹性IP不在免费套餐范围内，
+> 也就是说，弹性 IP 关联到**运行中**的实例是免费的；若实例停止或弹性 IP 未关联任何实例，AWS 会收取少量费用（约 $0.005/小时，即 30 天为3.6$），
+> 不用时记得释放。
 
 ### 10.2 用 Github Actions 部署前的检查
+
 1.EC2 上已经安装了 Docker 和 Docker Compose
 2.EC2 上已经有 ~/smart-invest/docker-compose.yml 和 .env 文件
 3.EC2 的 Security Group 已开放相应端口
 4.所有 GitHub Secrets 已填写完毕
-
-
 
 ### 10.3 GIthub Action 的 CI & CD 配置文件
 
@@ -671,12 +692,14 @@ GitHub 仓库 → Settings → Secrets and variables → Actions → New reposit
 见本工程代码  `.github/workflows/ci.yml`
 前后端 CD
 见本工程代码 `.github/workflows/cd.yml`：
+
 ---
 
 ## 第十一步：首次部署
 
 说明：
 GitHub Actions 会自动完成：
+
 1. 构建 JAR → 打包 Docker 镜像 → 推送到 ECR
 2. SSH 进 EC2 → 拉取新镜像 → `docker compose up -d app`
 3. npm build 前端 → 同步到 S3 → 刷新 CloudFront 缓存
@@ -684,33 +707,30 @@ GitHub Actions 会自动完成：
 (!!！注：如果数据库部署失败，这个命令 docker compose down -v 可以删除容器和挂载卷卷，也就是删除数据库数据所在卷，慎用。）
 在 GitHub 仓库 → **Actions** 标签页查看执行进度和日志。
 
-
 ### 方式一：通过 GitHub Actions 部署（推荐）
 
 1. 手动点击 Actions 的 workflow:
-登录 github, 点击 Actions 标签页，确认 CI（ci.yml中定义的名称） 和 CD(cd.yml中定义的名称） 已经出现在左上角的菜单中，
-说明 GitHub Actions 已正确识别到 ci.yml 和 cd.yml 配置文件。ci.yml 和 cd.yml 配置文件中配置了允许手动触发。
--> CI -> Run workflow -> Use workflow from: Branch:master -> Run workflow button -> CI 手动触发完成；
--> CD -> Run workflow -> Use workflow from: Branch:master -> Run workflow button -> CD 手动触发完成；
+   登录 github, 点击 Actions 标签页，确认 CI（ci.yml中定义的名称） 和 CD(cd.yml中定义的名称） 已经出现在左上角的菜单中，
+   说明 GitHub Actions 已正确识别到 ci.yml 和 cd.yml 配置文件。ci.yml 和 cd.yml 配置文件中配置了允许手动触发。
+   -> CI -> Run workflow -> Use workflow from: Branch:master -> Run workflow button -> CI 手动触发完成；
+   -> CD -> Run workflow -> Use workflow from: Branch:master -> Run workflow button -> CD 手动触发完成；
 
 一切完成后，
-访问 `https://d2hoqnqufe8qq0.cloudfront.net`（例：`https://d2xxxxxxxxxxxx.cloudfront.net`）验证部署成功。
+访问 `https://d2hoqnqufe8qq0.cloudfront.net`验证部署成功。
 
 2. 或者遵循CI & CD最佳实践， 放开 ci.yml 和 cd.yml 中的注释，应用 github repository 的PR 或 push 等动作来自动触发
-（按照规范 CI & CD 流程的话，
-根据代码 .github/workflows/ci.yml 中的配置 提 pull request 【注意不是 push】到 代码到 `main` 分支，即可触发 CI 流程自动执行；
-根据代码 .github/workflows/cd.yml 中的配置,代码被合并到 main 后，会触发 CD 流程会自动执行，直接完成部署。
-但是 ci.yml 和 cd.yml 中的自动触发条件我临时注释掉了，避免提代码就触发重新部署。
-）
+   （按照规范 CI & CD 流程的话，
+   根据代码 .github/workflows/ci.yml 中的配置 提 pull request 【注意不是 push】到 代码到 `main` 分支，即可触发 CI 流程自动执行；
+   根据代码 .github/workflows/cd.yml 中的配置,代码被合并到 main 后，会触发 CD 流程会自动执行，直接完成部署。
+   但是 ci.yml 和 cd.yml 中的自动触发条件我临时注释掉了，避免提代码就触发重新部署。
+   ）
 
 ```bash
 git push origin main
 ```
 
 一切完成后，
-访问 `https://d2hoqnqufe8qq0.cloudfront.net`（例：`https://d2xxxxxxxxxxxx.cloudfront.net`）验证部署成功。
-
-
+访问 `https://d2hoqnqufe8qq0.cloudfront.net`验证部署成功。
 
 ---
 
@@ -764,7 +784,7 @@ aws cloudfront create-invalidation \
   --paths "/*"
 ```
 
-然后访问 `https://d2hoqnqufe8qq0.cloudfront.net`（例：`https://d2xxxxxxxxxxxx.cloudfront.net`）验证。
+然后访问 `https://d2hoqnqufe8qq0.cloudfront.net`验证。
 
 ---
 
@@ -809,25 +829,25 @@ AWS Console → EC2 → Instances
 
 按顺序操作：
 
-| 步骤 | 操作 |
-|------|------|
-| 1. EC2 | Instance state → **Terminate**（磁盘数据一并删除） |
-| 2. S3 | 先 Empty（清空内容），再 Delete bucket |
-| 3. CloudFront | 先 Disable（等状态变为 Deployed），再 Delete |
-| 4. ECR | 选中所有镜像 Delete，再删除 repository |
-| 5. IAM 用户 | IAM → Users → Delete（可选） |
+| 步骤            | 操作                                       |
+| ------------- | ---------------------------------------- |
+| 1. EC2        | Instance state → **Terminate**（磁盘数据一并删除） |
+| 2. S3         | 先 Empty（清空内容），再 Delete bucket            |
+| 3. CloudFront | 先 Disable（等状态变为 Deployed），再 Delete       |
+| 4. ECR        | 选中所有镜像 Delete，再删除 repository             |
+| 5. IAM 用户     | IAM → Users → Delete（可选）                 |
 
 ---
 
 ### 各服务费用参考
 
-| 服务 | 月费用 | 停止/删除方式 |
-|------|--------|--------------|
-| EC2 t3.micro | ~$8 | Stop（保留）或 Terminate（删除） |
-| EBS 磁盘（随 EC2） | ~$0.8 | 随 Terminate 一起删除 |
-| S3 | ~$0.02 | 清空后删除 bucket |
-| CloudFront | ~$0.01 | Disable 后删除 distribution |
-| ECR | ~$0.1/GB | 删除镜像和 repository |
+| 服务            | 月费用      | 停止/删除方式                  |
+| ------------- | -------- | ------------------------ |
+| EC2 t3.micro  | ~$8      | Stop（保留）或 Terminate（删除）  |
+| EBS 磁盘（随 EC2） | ~$0.8    | 随 Terminate 一起删除         |
+| S3            | ~$0.02   | 清空后删除 bucket             |
+| CloudFront    | ~$0.01   | Disable 后删除 distribution |
+| ECR           | ~$0.1/GB | 删除镜像和 repository         |
 
 ---
 
@@ -842,4 +862,3 @@ AWS Console → EC2 → Instances
 | 密钥管理        | Secrets Manager | 存储 DB密码、JWT密钥               |
 | 邮件服务        | SES             | 发送通知邮件                      |
 | CI/CD       | GitHub Actions  | 自动构建和部署                     |
-
