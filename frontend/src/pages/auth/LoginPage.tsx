@@ -60,9 +60,45 @@ export default function LoginPage() {
 
       {/* Centered brand header */}
       <div className="mt-10 mb-8 text-center">
-        <h1 className="text-4xl font-black tracking-tight bg-gradient-to-r from-si-red via-orange-500 to-yellow-400 bg-clip-text text-transparent drop-shadow-sm">
-          Smart Invest
-        </h1>
+        {/* Smart Invest trademark badge */}
+        <div
+          className="inline-flex items-center justify-center px-8 py-2 rounded-full"
+          style={{
+            background: 'linear-gradient(90deg, #E8341A, #FF7043, #FFC107)',
+            boxShadow: '0 4px 16px rgba(232,52,26,0.35)',
+          }}
+        >
+          <h1 className="text-4xl font-black tracking-tight text-white drop-shadow-sm">
+            Smart Invest
+          </h1>
+        </div>
+        {/* 3D title with ellipse shadow */}
+        <div className="relative flex flex-col items-center mt-3">
+          <p
+            className="font-black"
+            style={{
+              fontSize: '1.55rem',
+              letterSpacing: '0.28em',
+              color: '#FF5722',
+              textShadow:
+                '1px 1px 0 #e64a19, 2px 2px 0 #d84315, 3px 3px 0 #bf360c, 4px 4px 0 #8d2001, 0 7px 16px rgba(180,40,10,0.38)',
+            }}
+          >
+            {t('login_platform')}
+          </p>
+          {/* Ellipse "floating shadow" beneath the text */}
+          <div
+            style={{
+              width: '88%',
+              height: '16px',
+              borderRadius: '50%',
+              background:
+                'radial-gradient(ellipse at center, rgba(220,60,20,0.52) 0%, rgba(220,60,20,0.18) 55%, transparent 80%)',
+              filter: 'blur(3px)',
+              marginTop: '3px',
+            }}
+          />
+        </div>
         <div className="inline-block mt-3 p-[2px] rounded-xl bg-gradient-to-r from-si-red via-orange-400 to-yellow-400">
           <div className="rounded-[10px] bg-white px-5 py-2">
             <p className="text-base font-bold bg-gradient-to-r from-si-red via-orange-500 to-yellow-400 bg-clip-text text-transparent italic tracking-wide whitespace-pre-line leading-relaxed">

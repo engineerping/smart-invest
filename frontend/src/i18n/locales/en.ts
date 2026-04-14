@@ -9,6 +9,7 @@ const en = {
 
   // Auth - Login
   login_subtitle: 'Sign in to your account',
+  login_platform: 'Public Fund Investment Platform',
   login_tagline: 'Compact Yet Complete\nPrototype Yet Authentic',
   login_madeBy: 'Developed by: georgecuiwill@gmail.com',
   login_email: 'Email',
