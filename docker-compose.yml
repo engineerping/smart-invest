@@ -1,4 +1,3 @@
-version: '3.9'
 # docker compose 命令默认会读取这文件docker-compose.yml中的内容,例如命令docker compose up -d postgres 就会根据这个文件中的定义的 service name 即 postgres 来启动服务
 services:
   postgres: # 定义 ervice name 为 postgres; 例如命令docker compose up -d postgres 会用到这个服务名称 postgres; 另外可以在其他服务中通过这个名称访问数据库
