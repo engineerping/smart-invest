@@ -15,7 +15,7 @@
     <dependencies>
         <dependency>
             <groupId>com.smartinvest</groupId>
-            <artifactId>module-portfolio</artifactId>
+            <artifactId>module-holding</artifactId>
             <version>${project.version}</version>
         </dependency>
     </dependencies>

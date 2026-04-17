@@ -27,6 +27,7 @@ public class OrderService {
         order.setAmount(req.amount());
         order.setInvestmentAccount(req.investmentAccount());
         order.setSettlementAccount(req.settlementAccount());
+        order.setPortfolioId(req.portfolioId());
         order.setReferenceNumber(referenceGenerator.generate(req.orderType()));
         order.setSettlementDate(settlementDateCalculator.calculate(order.getOrderDate(), 2));
         Order saved = orderRepository.save(order);

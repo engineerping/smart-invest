@@ -1,5 +1,65 @@
 # Product Analysis & Scope
 
+## 1.0 Backend Module Dependency Map
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                             app                                 │
+│           (Spring Boot launcher — assembles all modules)        │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │ depends on all modules
+                           ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                                                                        │
+│  ┌────────────────────┐          ┌──────────────────┐                 │
+│  │  module-portfolio  │          │ module-scheduler │                 │
+│  │                    │          │                  │                 │
+│  │  POST /api/portfolio          │ @Scheduled jobs  │                 │
+│  │  Orchestrates N-fund          │ settlement +     │                 │
+│  │  portfolio invest  │          │ monthly plans    │                 │
+│  └──────┬──────┬──────┘          └────┬──────┬──────┘                 │
+│         │      │                      │      │                        │
+│         │      └───────────┐          │      │                        │
+│         │                  │          │      │                        │
+│         ▼                  ▼          ▼      ▼                        │
+│  ┌────────────┐    ┌──────────────┐  ┌─────────────┐                 │
+│  │module-fund │    │ module-order │  │ module-plan │                 │
+│  │            │◄───│              │  │             │                 │
+│  │ Fund data  │    │ Place order, │  │ Monthly     │                 │
+│  │ NAV history│    │ settle, cancel    investment  │                 │
+│  └────────────┘    └──────┬───────┘  └──────┬──────┘                 │
+│         ▲                 │                  │                        │
+│         │                 ▼                  │  (module-plan also     │
+│         │          ┌──────────────┐          │   depends on fund,     │
+│         └──────────│module-holding│          │   omitted for clarity) │
+│                    │              │◄─────────┘  (TODO: plan settlement│
+│                    │ Holdings     │               also updates holding)│
+│                    │ Unrealised   │                                    │
+│                    │ P&L / MV     │                                    │
+│                    └──────────────┘                                    │
+│                                                                        │
+│  ┌──────────────────┐   ┌──────────────────────┐                      │
+│  │  module-user     │   │  module-notification │                      │
+│  │  Auth / Risk     │   │  SES email dispatch  │                      │
+│  └──────────────────┘   └──────────────────────┘                      │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+**Dependency direction rules:**
+
+| Module | Depends on | Reason |
+|--------|-----------|--------|
+| `module-portfolio` | `module-fund`, `module-order`, `module-plan` | Orchestrator: validates funds, places N orders or N plans |
+| `module-order` | `module-holding` | After settlement calls `HoldingService.applySettlement()` |
+| `module-holding` | `module-fund` | Queries latest NAV to compute market value |
+| `module-plan` | `module-fund` | Queries fund info |
+| `module-scheduler` | `module-order`, `module-plan` | Triggers settlement and monthly plan execution on schedule |
+
+**Key design principle: all dependencies are one-directional — no cycles.**  
+`module-order` has no knowledge of `module-portfolio`. The `orders` table carries a nullable `portfolio_id` column purely as a data reference; all orchestration logic lives in the upper `module-portfolio` layer.
+
+---
+
 ## 1.1 Core Business Entities
 
 Extracted from the Smart Invest User Guide (all 26 pages):

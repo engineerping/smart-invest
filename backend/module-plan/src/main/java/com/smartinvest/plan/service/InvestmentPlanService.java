@@ -26,6 +26,7 @@ public class InvestmentPlanService {
         plan.setNextContributionDate(req.startDate() != null ? req.startDate() : LocalDate.now().plusMonths(1));
         plan.setInvestmentAccount(req.investmentAccount());
         plan.setSettlementAccount(req.settlementAccount());
+        plan.setPortfolioId(req.portfolioId());
         plan.setReferenceNumber(generateRef());
         return planRepository.save(plan);
     }

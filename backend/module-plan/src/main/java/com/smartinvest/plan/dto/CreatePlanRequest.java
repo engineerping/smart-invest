@@ -10,5 +10,6 @@ public record CreatePlanRequest(
     @NotNull @DecimalMin("100.00") BigDecimal monthlyAmount,
     LocalDate startDate,
     String investmentAccount,
-    String settlementAccount
+    String settlementAccount,
+    UUID portfolioId   // nullable：从自建组合创建定投计划时传入
 ) {}

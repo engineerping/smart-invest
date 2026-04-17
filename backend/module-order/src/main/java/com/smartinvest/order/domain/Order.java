@@ -25,6 +25,7 @@ public class Order {
     @Column(name = "order_date") LocalDate orderDate = LocalDate.now();
     @Column(name = "settlement_date") LocalDate settlementDate;
     @Column(name = "plan_id") UUID planId;
+    @Column(name = "portfolio_id") UUID portfolioId;
     @Column(name = "created_at") OffsetDateTime createdAt = OffsetDateTime.now();
     @Column(name = "completed_at") OffsetDateTime completedAt;
 }

@@ -23,10 +23,11 @@
         <module>module-user</module>
         <module>module-fund</module>
         <module>module-order</module>
-        <module>module-portfolio</module>
+        <module>module-holding</module>
         <module>module-plan</module>
         <module>module-scheduler</module>
         <module>module-notification</module>
+        <module>module-portfolio</module>
         <module>app</module>
     </modules>
 

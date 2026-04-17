@@ -19,7 +19,7 @@ export default function MyHoldingsPage() {
   const { t } = useTranslation();
   const { data: holdings = [] } = useQuery<HoldingResponse[]>({
     queryKey: ['holdings'],
-    queryFn: () => apiClient.get('/api/portfolio/me/holdings').then(r => r.data),
+    queryFn: () => apiClient.get('/api/holdings/me').then(r => r.data),
   });
   const { data: ordersPage } = useQuery({
     queryKey: ['orders'],

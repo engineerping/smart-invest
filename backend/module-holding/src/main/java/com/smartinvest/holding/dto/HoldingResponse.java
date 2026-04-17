@@ -1,4 +1,4 @@
-package com.smartinvest.portfolio.dto;
+package com.smartinvest.holding.dto;
 
 import java.math.BigDecimal;
 import java.util.UUID;

@@ -11,5 +11,6 @@ CREATE TABLE investment_plans (
     completed_orders       INTEGER       DEFAULT 0,
     total_invested         DECIMAL(15,2) DEFAULT 0.00,
     plan_creation_date     DATE          NOT NULL DEFAULT CURRENT_DATE,
-    terminated_at          TIMESTAMPTZ
+    terminated_at          TIMESTAMPTZ,
+    portfolio_id           UUID          REFERENCES user_portfolios(id)
 );

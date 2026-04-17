@@ -33,7 +33,6 @@ Smart Invest 是一款**小成本投资平台**，通过这软件，银行将诸
 
 **成本方案:** 个人已通过 AWS Instance Scheduler 实现仅在工作日的（8:00-12:00和14:00-18:00）之间开启服务，其他时间自动关闭 EC2 和 RDS，降低服务器运行成本。
 
-
 ---
 
 ## 目录
@@ -86,6 +85,7 @@ Smart Invest 是一款**小成本投资平台**，通过这软件，银行将诸
 │                     │               │  │  • UserModule      :8080   │ │
 │                     │               │  │  • FundModule              │ │
 │                     │               │  │  • OrderModule             │ │
+│                     │               │  │  • HoldingModule           │ │
 │                     │               │  │  • PortfolioModule         │ │
 │                     │               │  │  • PlanModule              │ │
 │                     │               │  │  • SchedulerModule         │ │
@@ -118,8 +118,9 @@ Smart Invest 是一款**小成本投资平台**，通过这软件，银行将诸
 | -------------- | ------------------------------------- | --------------------------------------------- |
 | `user`         | 注册、登录、JWT 认证、风险问卷                     | `/api/auth/**`、`/api/users/**`、`/api/risk/**` |
 | `fund`         | 基金目录、NAV 历史、资产配置、Top10 持仓             | `/api/funds/**`                               |
-| `order`        | 单只基金下单、组合批量下单、取消订单                    | `/api/orders/**`                              |
-| `portfolio`    | 持仓计算、未实现盈亏、总市值                        | `/api/portfolio/**`                           |
+| `order`        | 单只基金下单、结算、取消订单                        | `/api/orders/**`                              |
+| `holding`      | 持仓计算、未实现盈亏、总市值                        | `/api/holdings/**`                            |
+| `portfolio`    | 自建组合：创建组合模板、按比例拆分金额批量投资               | `/api/portfolio/**`                           |
 | `plan`         | 月定投计划管理、终止计划                          | `/api/plans/**`                               |
 | `scheduler`    | 月定投自动执行（Spring `@Scheduled`）、NAV 模拟更新 | 内部任务                                          |
 | `notification` | 通过 Amazon SES 发送邮件通知                  | 内部事件驱动                                        |
@@ -306,14 +307,17 @@ backend/app/src/main/resources/db/migration/
 ├── [V7__create_fund_geo_allocations.sql](backend/app/src/main/resources/db/migration/V7__create_fund_geo_allocations.sql)
 ├── [V8__create_fund_sector_allocations.sql](backend/app/src/main/resources/db/migration/V8__create_fund_sector_allocations.sql)
 ├── [V9__create_reference_asset_mix.sql](backend/app/src/main/resources/db/migration/V9__create_reference_asset_mix.sql)
-├── [V10__create_orders.sql](backend/app/src/main/resources/db/migration/V10__create_orders.sql)
-├── [V11__create_investment_plans.sql](backend/app/src/main/resources/db/migration/V11__create_investment_plans.sql)
-├── [V12__create_holdings.sql](backend/app/src/main/resources/db/migration/V12__create_holdings.sql)
-├── [V13__seed_funds.sql](backend/app/src/main/resources/db/migration/V13__seed_funds.sql)
-├── [V14__seed_demo_data.sql](backend/app/src/main/resources/db/migration/V14__seed_demo_data.sql)
-├── [V15__seed_nav_and_demo.sql](backend/app/src/main/resources/db/migration/V15__seed_nav_and_demo.sql)
-├── [V16__seed_nav_history.sql](backend/app/src/main/resources/db/migration/V16__seed_nav_history.sql)
-└── [V17__seed_fund_allocations.sql](backend/app/src/main/resources/db/migration/V17__seed_fund_allocations.sql)
+├── [V10__create_user_portfolios.sql](backend/app/src/main/resources/db/migration/V10__create_user_portfolios.sql)
+├── [V11__create_orders.sql](backend/app/src/main/resources/db/migration/V11__create_orders.sql)
+├── [V12__create_investment_plans.sql](backend/app/src/main/resources/db/migration/V12__create_investment_plans.sql)
+├── [V13__create_holdings.sql](backend/app/src/main/resources/db/migration/V13__create_holdings.sql)
+├── [V14__seed_funds.sql](backend/app/src/main/resources/db/migration/V14__seed_funds.sql)
+├── [V15__seed_demo_data.sql](backend/app/src/main/resources/db/migration/V15__seed_demo_data.sql)
+├── [V16__seed_nav_and_demo.sql](backend/app/src/main/resources/db/migration/V16__seed_nav_and_demo.sql)
+├── [V17__seed_nav_history.sql](backend/app/src/main/resources/db/migration/V17__seed_nav_history.sql)
+├── [V18__seed_fund_allocations.sql](backend/app/src/main/resources/db/migration/V18__seed_fund_allocations.sql)
+├── [V19__seed_demo_orders.sql](backend/app/src/main/resources/db/migration/V19__seed_demo_orders.sql)
+└── [V20__seed_demo_plans.sql](backend/app/src/main/resources/db/migration/V20__seed_demo_plans.sql)
 ```
 
 ### 5.3 DDL — 核心表定义
@@ -539,8 +543,9 @@ backend/
 │       └── application-prod.yml
 ├── module-user/                         （用户、认证、风险问卷模块）
 ├── module-fund/                         （基金目录、NAV、资产配置模块）
-├── module-order/                        （订单下单、取消模块）
-├── module-portfolio/                    （持仓、盈亏计算模块）
+├── module-order/                        （订单下单、结算、取消模块）
+├── module-holding/                      （持仓、盈亏计算模块）
+├── module-portfolio/                    （自建组合：模板管理 + 按比例批量投资）
 ├── module-plan/                         （月定投计划模块）
 ├── module-scheduler/                    （定时任务模块）
 └── module-notification/                 （SES 邮件发送模块）
@@ -666,14 +671,25 @@ public List<BigDecimal> distributeAmount(BigDecimal total,
 }
 ```
 
-### 6.7 module-portfolio：API 接口清单
+### 6.7 module-holding：API 接口清单
 
 ```
-GET    /api/portfolio/me              持仓汇总（总市值、总盈亏、持仓列表）
-GET    /api/portfolio/me/holdings     各基金持仓明细（含未实现盈亏金额及百分比）
+GET    /api/holdings/me              各基金持仓列表（含每只基金市值）
+GET    /api/holdings/me/summary      总市值汇总
 ```
 
-### 6.8 module-plan：API 接口清单
+### 6.8 module-portfolio：API 接口清单
+
+```
+POST   /api/portfolio                创建自建组合模板（名称 + 基金配置，各基金比例合计必须等于 100%）
+GET    /api/portfolio                查看当前用户的所有活跃组合模板
+GET    /api/portfolio/{id}           查看单个组合模板详情（名称、配置比例、创建时间）
+DELETE /api/portfolio/{id}           软删除组合模板
+POST   /api/portfolio/{id}/invest    从组合投资：将总金额按比例拆分，
+                                     创建 N 笔订单（ONE_TIME）或 N 条定投计划（MONTHLY）
+```
+
+### 6.9 module-plan：API 接口清单
 
 ```
 POST   /api/plans                     创建月定投计划
@@ -682,7 +698,7 @@ GET    /api/plans/{id}                计划详情（下次扣款日、已完成
 DELETE /api/plans/{id}                终止计划（停止后续扣款，不自动赎回持仓）
 ```
 
-### 6.9 module-scheduler 定时任务
+### 6.10 module-scheduler 定时任务
 
 > 类文件：[MonthlyInvestmentScheduler.java](backend/module-scheduler/src/main/java/com/smartinvest/scheduler/MonthlyInvestmentScheduler.java)
 
@@ -989,23 +1005,23 @@ aws cloudwatch put-metric-alarm \
 
 ## 11. 项目时间表
 
-| 周次      | 交付内容                                                        | 里程碑           |
-| ------- | ----------------------------------------------------------- | ------------- |
-| 第 0 周   | 工具安装、仓库初始化、Terraform 骨架搭建、`docker-compose.yml` 配置           | ✓ 开发环境就绪      |
-| 第 1–2 周 | AWS 基础设施（VPC、EC2、RDS、S3、CloudFront）通过 Terraform 完成部署        | ✓ 云环境就绪       |
-| 第 2–3 周 | `module-user`：注册、登录、JWT、风险问卷（5 个风险等级）                       | ✓ 认证模块完成      |
-| 第 3–4 周 | `module-fund`：基金目录、NAV 历史、资产配置、Top10 持仓、种子数据录入              | ✓ 基金数据就绪      |
-| 第 4 周   | `module-order`：单只基金下单（路径 A）、自建组合批量下单（路径 C）、取消订单             | ✓ 核心交易流程完成    |
-| 第 5 周   | `module-plan`：月定投计划增删查、终止流程                                 | ✓ 投资计划模块完成    |
-| 第 5 周   | `module-portfolio`：持仓计算、未实现盈亏、总市值                           | ✓ 持仓视图完成      |
-| 第 5–6 周 | 前端 — 认证页面、Smart Invest 主页、基金列表（含排序/筛选）                      | ✓ 前端框架建立      |
-| 第 6–7 周 | 前端 — 基金详情页（NAV 图表、风险标尺、多 Tab）、完整下单流程（4 步 + 5 步）             | ✓ 完整投资流程贯通    |
-| 第 7 周   | 前端 — 我的持仓、我的交易、我的计划、取消订单/终止计划流程                             | ✓ 功能全覆盖       |
-| 第 8 周   | `module-scheduler`（月定投自动执行） + `module-notification`（SES 邮件） | ✓ 自动化任务完成     |
-| 第 9 周   | CI/CD 流水线、GitHub Actions 工作流、EC2 systemd 自动部署               | ✓ DevOps 体系就绪 |
-| 第 10 周  | 端到端测试、CloudWatch 告警配置、结构化日志接入                               | ✓ 可观测性完成      |
-| 第 11 周  | 生产环境部署、HTTPS 配置、域名绑定、演示数据填充                                 | ✓ **正式上线**    |
-| 第 12 周  | README 撰写、系统架构图绘制、项目文档整理                                    | ✓ 仓库文档齐备      |
+| 周次      | 交付内容                                                           | 里程碑           |
+| ------- | -------------------------------------------------------------- | ------------- |
+| 第 0 周   | 工具安装、仓库初始化、Terraform 骨架搭建、`docker-compose.yml` 配置              | ✓ 开发环境就绪      |
+| 第 1–2 周 | AWS 基础设施（VPC、EC2、RDS、S3、CloudFront）通过 Terraform 完成部署           | ✓ 云环境就绪       |
+| 第 2–3 周 | `module-user`：注册、登录、JWT、风险问卷（5 个风险等级）                          | ✓ 认证模块完成      |
+| 第 3–4 周 | `module-fund`：基金目录、NAV 历史、资产配置、Top10 持仓、种子数据录入                 | ✓ 基金数据就绪      |
+| 第 4 周   | `module-order`：单只基金下单（路径 A）、自建组合批量下单（路径 C）、取消订单                | ✓ 核心交易流程完成    |
+| 第 5 周   | `module-plan`：月定投计划增删查、终止流程                                    | ✓ 投资计划模块完成    |
+| 第 5 周   | `module-holding`：持仓计算、未实现盈亏、总市值；`module-portfolio`：自建组合模板与批量投资 | ✓ 持仓视图完成      |
+| 第 5–6 周 | 前端 — 认证页面、Smart Invest 主页、基金列表（含排序/筛选）                         | ✓ 前端框架建立      |
+| 第 6–7 周 | 前端 — 基金详情页（NAV 图表、风险标尺、多 Tab）、完整下单流程（4 步 + 5 步）                | ✓ 完整投资流程贯通    |
+| 第 7 周   | 前端 — 我的持仓、我的交易、我的计划、取消订单/终止计划流程                                | ✓ 功能全覆盖       |
+| 第 8 周   | `module-scheduler`（月定投自动执行） + `module-notification`（SES 邮件）    | ✓ 自动化任务完成     |
+| 第 9 周   | CI/CD 流水线、GitHub Actions 工作流、EC2 systemd 自动部署                  | ✓ DevOps 体系就绪 |
+| 第 10 周  | 端到端测试、CloudWatch 告警配置、结构化日志接入                                  | ✓ 可观测性完成      |
+| 第 11 周  | 生产环境部署、HTTPS 配置、域名绑定、演示数据填充                                    | ✓ **正式上线**    |
+| 第 12 周  | README 撰写、系统架构图绘制、项目文档整理                                       | ✓ 仓库文档齐备      |
 
 ---
 
@@ -1025,6 +1041,7 @@ smart-invest/
 │   ├── module-user/
 │   ├── module-fund/
 │   ├── module-order/
+│   ├── module-holding/
 │   ├── module-portfolio/
 │   ├── module-plan/
 │   ├── module-scheduler/

@@ -1,9 +1,9 @@
 package com.smartinvest.order.service;
 
 import com.smartinvest.fund.repository.FundNavHistoryRepository;
+import com.smartinvest.holding.service.HoldingService;
 import com.smartinvest.order.domain.Order;
 import com.smartinvest.order.repository.OrderRepository;
-import com.smartinvest.portfolio.service.PortfolioService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,7 +18,7 @@ public class OrderSettlementExecutor {
 
     private final OrderRepository orderRepository;
     private final FundNavHistoryRepository fundNavHistoryRepository;
-    private final PortfolioService portfolioService;
+    private final HoldingService holdingService;
 
     /**
      * 结算单笔订单：计算成交份数，将订单标记为 COMPLETED，并更新用户持仓。
@@ -43,6 +43,6 @@ public class OrderSettlementExecutor {
         orderRepository.save(order);
 
         // 将成交份数和金额累加到用户持仓
-        portfolioService.applySettlement(order.getUserId(), order.getFundId(), executedUnits, order.getAmount());
+        holdingService.applySettlement(order.getUserId(), order.getFundId(), executedUnits, order.getAmount());
     }
 }

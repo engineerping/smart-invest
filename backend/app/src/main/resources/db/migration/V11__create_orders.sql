@@ -14,8 +14,10 @@ CREATE TABLE orders (
     order_date         DATE          NOT NULL DEFAULT CURRENT_DATE,
     settlement_date    DATE,
     plan_id            UUID,
+    portfolio_id       UUID          REFERENCES user_portfolios(id),
     created_at         TIMESTAMPTZ   DEFAULT NOW(),
     completed_at       TIMESTAMPTZ
 );
+
 CREATE INDEX idx_orders_user_status ON orders (user_id, status);
 CREATE INDEX idx_orders_user_date   ON orders (user_id, order_date DESC);

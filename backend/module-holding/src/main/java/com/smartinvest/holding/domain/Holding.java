@@ -1,4 +1,4 @@
-package com.smartinvest.portfolio.domain;
+package com.smartinvest.holding.domain;
 
 import jakarta.persistence.*;
 import lombok.*;

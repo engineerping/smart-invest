@@ -11,7 +11,7 @@ export default function SmartInvestHomePage() {
   const { t, i18n } = useTranslation();
   const { data: summary } = useQuery<{ totalMarketValue: number }>({
     queryKey: ['portfolio-summary'],
-    queryFn: () => apiClient.get('/api/portfolio/me/summary').then(r => r.data),
+    queryFn: () => apiClient.get('/api/holdings/me/summary').then(r => r.data),
   });
 
   const toggleLang = () => {

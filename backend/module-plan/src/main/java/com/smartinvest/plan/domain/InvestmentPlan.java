@@ -24,4 +24,5 @@ public class InvestmentPlan {
     @Column(name = "total_invested") BigDecimal totalInvested = BigDecimal.ZERO;
     @Column(name = "plan_creation_date") LocalDate planCreationDate = LocalDate.now();
     @Column(name = "terminated_at") OffsetDateTime terminatedAt;
+    @Column(name = "portfolio_id") UUID portfolioId;  // nullable：从自建组合创建时关联
 }

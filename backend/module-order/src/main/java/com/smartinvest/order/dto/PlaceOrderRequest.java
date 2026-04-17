@@ -11,5 +11,6 @@ public record PlaceOrderRequest(
     @NotNull @DecimalMin("100.00") BigDecimal amount,
     LocalDate startDate,
     String investmentAccount,
-    String settlementAccount
+    String settlementAccount,
+    UUID portfolioId   // nullable：从自建组合下单时传入，用于分组
 ) {}

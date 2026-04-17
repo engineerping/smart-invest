@@ -84,6 +84,7 @@ Given the $200 AWS credit budget, the deployment uses **EC2-hosted Spring Boot s
 │                     │               │  │  • UserModule      :8080   │ │
 │                     │               │  │  • FundModule              │ │
 │                     │               │  │  • OrderModule             │ │
+│                     │               │  │  • HoldingModule           │ │
 │                     │               │  │  • PortfolioModule         │ │
 │                     │               │  │  • PlanModule              │ │
 │                     │               │  │  • SchedulerModule         │ │
@@ -118,7 +119,8 @@ Given the $200 AWS credit budget, the deployment uses **EC2-hosted Spring Boot s
 | `user`                  | Registration, login, JWT auth, risk questionnaire            | `/api/auth/**`, `/api/users/**`, `/api/risk/**` |
 | `fund`                  | Fund catalogue, NAV history, asset allocation, top holdings  | `/api/funds/**`                                 |
 | `order`                 | Place order (individual + portfolio), cancel order           | `/api/orders/**`                                |
-| `portfolio`             | Holdings calculation, unrealised P&L, total market value     | `/api/portfolio/**`                             |
+| `holding`               | Holdings calculation, unrealised P&L, total market value     | `/api/holdings/**`                              |
+| `portfolio`             | Build Your Own Portfolio — create templates, invest proportionally across N funds | `/api/portfolio/**`    |
 | `plan`                  | Monthly investment plan management, termination              | `/api/plans/**`                                 |
 | `scheduler`             | Monthly plan execution (Spring `@Scheduled`), NAV simulation | Internal                                        |
 | `notification`          | Email dispatch via Amazon SES                                | Internal event-driven                           |
@@ -295,14 +297,17 @@ backend/app/src/main/resources/db/migration/
 ├── [V7__create_fund_geo_allocations.sql](backend/app/src/main/resources/db/migration/V7__create_fund_geo_allocations.sql)
 ├── [V8__create_fund_sector_allocations.sql](backend/app/src/main/resources/db/migration/V8__create_fund_sector_allocations.sql)
 ├── [V9__create_reference_asset_mix.sql](backend/app/src/main/resources/db/migration/V9__create_reference_asset_mix.sql)
-├── [V10__create_orders.sql](backend/app/src/main/resources/db/migration/V10__create_orders.sql)
-├── [V11__create_investment_plans.sql](backend/app/src/main/resources/db/migration/V11__create_investment_plans.sql)
-├── [V12__create_holdings.sql](backend/app/src/main/resources/db/migration/V12__create_holdings.sql)
-├── [V13__seed_funds.sql](backend/app/src/main/resources/db/migration/V13__seed_funds.sql)
-├── [V14__seed_demo_data.sql](backend/app/src/main/resources/db/migration/V14__seed_demo_data.sql)
-├── [V15__seed_nav_and_demo.sql](backend/app/src/main/resources/db/migration/V15__seed_nav_and_demo.sql)
-├── [V16__seed_nav_history.sql](backend/app/src/main/resources/db/migration/V16__seed_nav_history.sql)
-└── [V17__seed_fund_allocations.sql](backend/app/src/main/resources/db/migration/V17__seed_fund_allocations.sql)
+├── [V10__create_user_portfolios.sql](backend/app/src/main/resources/db/migration/V10__create_user_portfolios.sql)
+├── [V11__create_orders.sql](backend/app/src/main/resources/db/migration/V11__create_orders.sql)
+├── [V12__create_investment_plans.sql](backend/app/src/main/resources/db/migration/V12__create_investment_plans.sql)
+├── [V13__create_holdings.sql](backend/app/src/main/resources/db/migration/V13__create_holdings.sql)
+├── [V14__seed_funds.sql](backend/app/src/main/resources/db/migration/V14__seed_funds.sql)
+├── [V15__seed_demo_data.sql](backend/app/src/main/resources/db/migration/V15__seed_demo_data.sql)
+├── [V16__seed_nav_and_demo.sql](backend/app/src/main/resources/db/migration/V16__seed_nav_and_demo.sql)
+├── [V17__seed_nav_history.sql](backend/app/src/main/resources/db/migration/V17__seed_nav_history.sql)
+├── [V18__seed_fund_allocations.sql](backend/app/src/main/resources/db/migration/V18__seed_fund_allocations.sql)
+├── [V19__seed_demo_orders.sql](backend/app/src/main/resources/db/migration/V19__seed_demo_orders.sql)
+└── [V20__seed_demo_plans.sql](backend/app/src/main/resources/db/migration/V20__seed_demo_plans.sql)
 ```
 
 ### 5.3 DDL — Core Tables
@@ -523,8 +528,9 @@ backend/
 │       └── application-prod.yml
 ├── module-user/                         (User, Auth, Risk modules)
 ├── module-fund/                         (Fund catalogue, NAV, allocations)
-├── module-order/                        (Order placement, cancellation)
-├── module-portfolio/                    (Holdings, P&L calculation)
+├── module-order/                        (Order placement, settlement, cancellation)
+├── module-holding/                      (Holdings, P&L calculation)
+├── module-portfolio/                    (Build Your Own Portfolio — templates + invest)
 ├── module-plan/                         (Monthly investment plans)
 ├── module-scheduler/                    (Cron jobs)
 └── module-notification/                 (SES email dispatch)
@@ -647,14 +653,25 @@ public List<BigDecimal> distributeAmount(BigDecimal total,
 }
 ```
 
-### 6.7 module-portfolio: API Reference
+### 6.7 module-holding: API Reference
 
 ```
-GET    /api/portfolio/me              Holdings summary (total market value, total P&L, holdings list)
-GET    /api/portfolio/me/holdings     Individual holding details with unrealised gain/loss
+GET    /api/holdings/me              Holdings list with market value per fund
+GET    /api/holdings/me/summary      Total market value summary
 ```
 
-### 6.8 module-plan: API Reference
+### 6.8 module-portfolio: API Reference
+
+```
+POST   /api/portfolio                Create a portfolio template (name + fund allocations, must sum to 100%)
+GET    /api/portfolio                List all active portfolio templates for current user
+GET    /api/portfolio/{id}           Portfolio template detail (name, allocations, created date)
+DELETE /api/portfolio/{id}           Soft-delete a portfolio template
+POST   /api/portfolio/{id}/invest    Invest from portfolio — split total amount proportionally,
+                                     creates N orders (ONE_TIME) or N plans (MONTHLY)
+```
+
+### 6.9 module-plan: API Reference
 
 ```
 POST   /api/plans                     Create monthly investment plan
@@ -663,7 +680,7 @@ GET    /api/plans/{id}                Plan detail (next contribution date, compl
 DELETE /api/plans/{id}                Terminate plan (stops future contributions; does not sell holdings)
 ```
 
-### 6.9 module-scheduler
+### 6.10 module-scheduler
 
 > Class file: [MonthlyInvestmentScheduler.java](backend/module-scheduler/src/main/java/com/smartinvest/scheduler/MonthlyInvestmentScheduler.java)
 
@@ -978,7 +995,7 @@ aws cloudwatch put-metric-alarm \
 | 3–4  | `module-fund`: fund catalogue, NAV history, asset allocation, top holdings, seed data        | ✓ Fund data ready               |
 | 4    | `module-order`: single-fund order (Pathway A), portfolio batch order (Pathway C), cancel     | ✓ Core transaction flow         |
 | 5    | `module-plan`: monthly investment plan CRUD, termination flow                                | ✓ Investment plans              |
-| 5    | `module-portfolio`: holdings calculation, unrealised P&L, total market value                 | ✓ Holdings view                 |
+| 5    | `module-holding`: holdings calculation, unrealised P&L; `module-portfolio`: Build Your Own Portfolio templates + invest | ✓ Holdings view |
 | 5–6  | Frontend — authentication pages, Smart Invest home page, fund list with sort/filter          | ✓ Frontend foundation           |
 | 6–7  | Frontend — fund detail page (NAV chart, risk gauge, tabs), all order flows (4-step + 5-step) | ✓ Full investment flows         |
 | 7    | Frontend — My Holdings, My Transactions, My Plans, cancel order/plan flows                   | ✓ Complete feature coverage     |
@@ -1006,6 +1023,7 @@ smart-invest/
 │   ├── module-user/
 │   ├── module-fund/
 │   ├── module-order/
+│   ├── module-holding/
 │   ├── module-portfolio/
 │   ├── module-plan/
 │   ├── module-scheduler/
