@@ -63,7 +63,7 @@ export default function RegisterPage() {
           href="https://github.com/engineerping/smart-invest"
           target="_blank"
           rel="noopener noreferrer"
-          className="text-si-dark hover:underline"
+          className="text-blue-600 font-normal underline"
         >
           https://github.com/engineerping/smart-invest
         </a>
