@@ -158,7 +158,19 @@ export default function LoginPage() {
         {t('login_noAccount')} <Link to="/register" className="text-si-red font-medium">{t('login_register')}</Link>
       </p>
 
-      <p className="mt-4 text-center text-sm font-bold text-si-dark tracking-wide">
+      <p className="mt-4 text-center text-sm text-si-dark">
+        github:{' '}
+        <a
+          href="https://github.com/engineerping/smart-invest"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-si-dark hover:underline"
+        >
+          https://github.com/engineerping/smart-invest
+        </a>
+      </p>
+
+      <p className="mt-2 text-center text-sm font-bold text-si-dark tracking-wide">
         {t('login_madeBy')}
       </p>
     </div>

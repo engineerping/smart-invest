@@ -11,7 +11,7 @@ const zh = {
   login_subtitle: '登录您的账户',
   login_platform: '公募基金投资平台',
   login_tagline: '麻雀虽小 五脏俱全\n原型产品 完整体验',
-  login_madeBy: '作者：georgecuiwill@gmail.com',
+  login_madeBy: '作者：cuizhiping163@163.com',
   login_email: '电子邮箱',
   login_password: '密码',
   login_error: '邮箱或密码错误。',

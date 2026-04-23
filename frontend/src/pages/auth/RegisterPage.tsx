@@ -56,6 +56,22 @@ export default function RegisterPage() {
       <p className="mt-6 text-center text-sm text-si-gray">
         {t('register_hasAccount')} <Link to="/login" className="text-si-red font-medium">{t('register_signIn')}</Link>
       </p>
+
+      <p className="mt-4 text-center text-sm text-si-dark">
+        github:{' '}
+        <a
+          href="https://github.com/engineerping/smart-invest"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-si-dark hover:underline"
+        >
+          https://github.com/engineerping/smart-invest
+        </a>
+      </p>
+
+      <p className="mt-2 text-center text-sm font-bold text-si-dark tracking-wide">
+        {t('login_madeBy')}
+      </p>
     </div>
   );
 }

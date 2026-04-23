@@ -18,7 +18,7 @@
 
 ## Overview
 
-Smart Invest is a **Low-cost investment platform** through which, Banks pool small amounts of money from many users, use these funds to buy high-quality funds that only those with large sums of money are eligible to purchase, and then distribute the profits to the users. — modelled after a real-world bank investment app.
+Smart Invest is a **small-amounts investment platform** through which, Banks pool small amounts of money from many users, and have them managed by professional fund managers, use these funds to buy high-quality funds that only those with large sums of money are eligible to purchase, and then distribute the profits to the users. — modelled after a real-world bank investment app.
 
 **What users can do:**
 

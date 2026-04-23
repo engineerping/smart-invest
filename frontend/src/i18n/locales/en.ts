@@ -11,7 +11,7 @@ const en = {
   login_subtitle: 'Sign in to your account',
   login_platform: 'Public Fund Investment Platform',
   login_tagline: 'Compact Yet Complete\nPrototype Yet Authentic',
-  login_madeBy: 'Developed by: georgecuiwill@gmail.com',
+  login_madeBy: 'Developed by: cuizhiping163@163.com',
   login_email: 'Email',
   login_password: 'Password',
   login_error: 'Invalid email or password.',
