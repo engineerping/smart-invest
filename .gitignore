@@ -1,4 +1,5 @@
-.worktrees
+
+.worktrees/
 target/
 .idea/
 *.iml
