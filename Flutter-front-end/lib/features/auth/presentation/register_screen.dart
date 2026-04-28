@@ -26,7 +26,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _obscurePassword = true;
-  bool _isEnglish = true;
+  final bool _isEnglish = true;
   String? _errorMessage;
 
   @override

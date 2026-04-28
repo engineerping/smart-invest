@@ -22,7 +22,7 @@ class LogoPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Rect.fromLTWH(0, 0, size.width, size.height);
-    final gradient = LinearGradient(
+    const gradient = LinearGradient(
       begin: Alignment.topLeft,
       end: Alignment.bottomRight,
       colors: [BrandColors.siRed, BrandColors.siOrange],
@@ -266,14 +266,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     // 3D title with ellipse shadow
                     Column(
                       children: [
-                        Text(
+                        const Text(
                           _loginPlatformText,
                           style: TextStyle(
                             fontSize: 24,
                             fontWeight: FontWeight.w900,
                             letterSpacing: 6,
-                            color: const Color(0xFFFF5722),
-                            shadows: const [
+                            color: Color(0xFFFF5722),
+                            shadows: [
                               Shadow(
                                 offset: Offset(1, 1),
                                 color: Color(0xFFE64A19),

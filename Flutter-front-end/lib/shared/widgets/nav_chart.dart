@@ -121,8 +121,8 @@ class _NavChartState extends ConsumerState<NavChart> {
           drawVerticalLine: false,
           horizontalInterval: (maxPct - minPct) / 5,
           getDrawingHorizontalLine: (value) {
-            return FlLine(
-              color: const Color(0xFFE5E7EB),
+            return const FlLine(
+              color: Color(0xFFE5E7EB),
               strokeWidth: 1,
             );
           },

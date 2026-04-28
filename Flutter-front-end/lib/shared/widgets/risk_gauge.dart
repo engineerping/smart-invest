@@ -64,9 +64,9 @@ class RiskGauge extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 24),
-          Row(
+          const Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
+            children: [
               Text('Product risk level', style: TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
               Text('Your risk tolerance', style: TextStyle(fontSize: 12, color: Color(0xFF6B7280))),
             ],

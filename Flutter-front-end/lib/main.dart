@@ -21,7 +21,7 @@ void main() async {
       overrides: [
         authNotifierProvider.overrideWith((ref) => AuthNotifier(authRepository)),
       ],
-      child: SmartInvestApp(),
+      child: const SmartInvestApp(),
     ),
   );
 }

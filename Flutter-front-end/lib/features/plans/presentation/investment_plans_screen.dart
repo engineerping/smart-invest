@@ -28,7 +28,7 @@ class InvestmentPlansScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final plansAsync = ref.watch(plansProvider);
-    final t = (key, {args}) => key; // i18n placeholder
+    t(key, {args}) => key; // i18n placeholder
 
     return PageLayout(
       title: 'Investment Plans',

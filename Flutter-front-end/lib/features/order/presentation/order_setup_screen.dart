@@ -256,9 +256,9 @@ class _OrderSetupScreenState extends ConsumerState<OrderSetupScreen> {
   }
 
   Widget _buildMgmtFeeInfo() {
-    return Row(
+    return const Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: const [
+      children: [
         Text(
           'Management Fee',
           style: TextStyle(
