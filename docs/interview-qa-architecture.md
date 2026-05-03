@@ -1319,3 +1319,1142 @@ spring:
 > - 两岸三中心优先讲 RTO/RPO 数字，面试官印象深刻。
 > - 容量题不要背数字，要说推导过程：用户数 → DAU → 并发 → QPS。
 > - 遇到不会的，说"In our current design we did X, but if I had more time I would also consider Y"。
+
+---
+
+## Part 9 — Java+React Full Stack Developer（JD 定向）
+
+## 第九部分：Java+React 全栈开发（针对新 JD）
+
+> 以下题目直接对应 Java+React 全栈开发岗 JD 要求。
+> React 相关只涉及 React.js，不涉及 Vue 或 Angular。
+
+---
+
+### Q34. What is the difference between Spring Boot and Spring Cloud? When do you need Spring Cloud?
+
+### 问题34：Spring Boot 和 Spring Cloud 的区别是什么？什么时候需要 Spring Cloud？
+
+**English Answer:**
+
+**Spring Boot** is a framework to build a single application quickly. It gives you auto-configuration, embedded servers, and production-ready features (actuator, health checks) out of the box.
+
+**Spring Cloud** is a set of tools to coordinate multiple microservices in a distributed system. You need Spring Cloud when you have many services that must work together.
+
+| Problem                             | Spring Cloud Component          | What It Does                                             |
+| ----------------------------------- | ------------------------------- | -------------------------------------------------------- |
+| Service A calls Service B           | **OpenFeign**                   | Declarative REST client — like writing a local interface |
+| Service B is down                   | **Resilience4j CircuitBreaker** | Prevent cascading failures                               |
+| Too many calls to Service B         | **@Retryable**                  | Automatically retry failed calls                         |
+| Each service has a different config | **Spring Cloud Config**         | Centralized config server, version-controlled            |
+| Finding other services              | **Spring Cloud Netflix Eureka** | Service registry — like a phone book for microservices   |
+| API Gateway                         | **Spring Cloud Gateway**        | Single entry point, routing, rate limiting               |
+
+**When you need it:** When you have more than 3-5 microservices that call each other. For a simple 2-service app, Spring Boot alone is enough.
+
+**中文解释：**
+
+- **Spring Boot**：快速构建单个微服务，内嵌服务器，开箱即用的健康检查。
+- **Spring Cloud**：协调多个微服务的工具集，用于解决分布式系统特有的问题。
+
+典型场景：服务间调用（OpenFeign）、防雪崩（Resilience4j）、配置中心（Config Server）、服务注册发现（Eureka）、API网关（Gateway）。服务数量超过3-5个时，才需要引入Spring Cloud。
+
+---
+
+### Q35. What is Spring Batch? When would you use it instead of a normal Spring Boot service?
+
+### 问题35：什么是 Spring Batch？什么时候用它而不是普通的 Spring Boot 服务？
+
+**English Answer:**
+
+Spring Batch is a framework for processing **large volumes of data** in a reliable, fault-tolerant way. It is designed for batch jobs — tasks that run on a schedule, process millions of records, and don't need human interaction.
+
+**Normal Spring Boot service** = handle one request at a time (online/OLTP).
+**Spring Batch job** = process millions of records overnight (offline/OLAP).
+
+**Example in our system:** Every night at 2am, Spring Batch:
+
+1. Reads 500,000 user portfolio snapshots from Aurora
+2. Calculates daily P&L (profit and loss) for each user
+3. Writes results back to the database
+4. Sends email summaries to users
+
+**Key Spring Batch concepts:**
+
+| Concept           | Meaning                                                |
+| ----------------- | ------------------------------------------------------ |
+| **Job**           | One batch task (e.g., "calculate daily P&L")           |
+| **Step**          | One phase of a job (read → process → write)            |
+| **ItemReader**    | Reads data from a source (database, file, API)         |
+| **ItemProcessor** | Transforms each record                                 |
+| **ItemWriter**    | Writes the processed record to destination             |
+| **Chunk**         | Process N records in one transaction (e.g., chunk=100) |
+
+**Why not just use a scheduled Spring Boot `@Scheduled` method?**
+
+For 100 records, `@Scheduled` is fine. For 5 million records, you need:
+
+- Restartable jobs (if the server crashes at record 3 million, resume from there)
+- Chunk-based processing (commit every 100 records, not all 5 million)
+- Skip policy (skip malformed records, don't fail the whole job)
+- Monitoring and restart UI
+
+**中文解释：**
+
+Spring Batch 用于处理**大批量离线数据**，典型场景：每日凌晨跑批计算用户收益、同步大批量数据、定时报表生成。
+
+核心概念：**Job**（一个批处理任务）→ **Step**（读→处→写三阶段）→ **Chunk**（每N条提交一次事务）。重启可恢复（服务器崩了从3百万条Resume）、跳过异常行（脏数据不导致整批失败），这些是普通 `@Scheduled` 方法做不到的。
+
+---
+
+### Q36. Explain Hibernate caching — first-level vs second-level cache. How do you avoid stale data?
+
+### 问题36：解释 Hibernate 的一级缓存和二级缓存。如何避免脏数据？
+
+**English Answer:**
+
+Hibernate sits between your Java code and the database. It uses caching to reduce database round-trips.
+
+**First-Level Cache (L1 Cache):**
+
+- Attached to the **current Hibernate Session** (one database transaction).
+- Automatically enabled. Cannot be turned off.
+- When you `session.find(User.class, 1)` twice in the same transaction, the second call hits L1 cache — zero database queries.
+- Once the session closes, L1 cache is gone.
+
+**Second-Level Cache (L2 Cache):**
+
+- Attached to the **SessionFactory** — shared across all sessions (entire application).
+- Must be explicitly enabled. Uses EhCache, Redis, or Infinispan.
+- Caches **entities** (entire rows). When any session loads User #1, it's cached for all future sessions.
+- Has a TTL (time-to-live) and a max size.
+
+```java
+// Enable L2 cache
+spring.jpa.properties.hibernate.cache.use_second_level_cache=true
+spring.jpa.properties.hibernate.cache.region.factory_class=ehcache
+
+// Mark an entity as cacheable
+@Entity
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
+public class Fund { ... }
+```
+
+**The stale data problem:**
+
+If User A changes their email, and User B reads the same User entity from L2 cache 5 seconds later, User B still sees the old email — until the cache expires.
+
+**Solutions:**
+
+1. **Short TTL** — set cache expiry to 30-60 seconds (acceptable for most use cases)
+2. **Cache invalidation on write** — when entity is updated, remove it from cache immediately
+3. **READ_WRITE strategy** — Hibernate writes to cache on update, so next read gets fresh data
+4. **For financial data: never cache writes** — disable L2 cache for Order/Portfolio entities
+
+**中文解释：**
+
+- **一级缓存**：绑定到Session，事务内有效，自动开启，不可关闭，同一事务内重复查询不走数据库。
+- **二级缓存**：绑定到SessionFactory，全应用共享，需手动开启，缓存实体（整行数据），有TTL过期策略。
+
+脏数据问题（User A改了数据，User B从缓存读到旧数据）：设置短TTL（30-60秒）、写操作时主动失效缓存（`session.evict()`）、金融关键数据（订单/持仓）禁用L2缓存。
+
+---
+
+### Q37. What is the difference between `@Transactional` and `@Transactional(readOnly = true)`? When does each matter?
+
+### 问题37：`@Transactional` 和 `@Transactional(readOnly = true)` 的区别是什么？各在什么场景下使用？
+
+**English Answer:**
+
+Both wrap a method in a database transaction, but with different database access hints.
+
+**`@Transactional` (default, readWrite):**
+
+- The database connection is opened with **write intent**.
+- Hibernate session dirty check is active — any changed entity is automatically flushed to the database at commit.
+- Uses a standard connection from the pool.
+- **Use when:** You are inserting, updating, or deleting data.
+
+**`@Transactional(readOnly = true)`:**
+
+- The database connection is opened with **read intent**.
+- Hibernate **skips dirty checking** — it does not track entity changes (saves CPU).
+- Some databases (PostgreSQL) use a **read replica** if one is available — reduces load on the primary.
+- The database may optimize its query plan for read-only workloads.
+- **Use when:** You are only reading data (select queries, reports, data export).
+
+```java
+// Read-only query — faster, no dirty checking
+@Transactional(readOnly = true)
+public List<Fund> getAllFunds() {
+    return fundRepository.findAll();
+}
+
+// Write operation — needs dirty checking
+@Transactional
+public Order placeOrder(OrderRequest request) {
+    Order order = new Order();
+    order.setStatus(OrderStatus.PENDING);
+    return orderRepository.save(order); // must be written
+}
+```
+
+**Performance difference:** For a read-only query on 10,000 rows, `readOnly=true` can be 10-20% faster because Hibernate skips the dirty-check step.
+
+**中文解释：**
+
+- **`@Transactional`**：默认读写事务，Hibernate开启脏数据检查（扫描所有托管实体是否有变更），适用于增删改操作。
+- **`@Transactional(readOnly = true)`**：只读事务，跳过脏数据检查（节省CPU），部分数据库会路由到读副本（减轻主库压力），适合查询报表、列表页等只读场景。
+
+性能收益：查询万级数据时，readOnly=true 可提升10-20%性能。
+
+---
+
+### Q38. What is a design pattern you have used to make code more reusable? Give a concrete example.
+
+### 问题38：你用过哪种设计模式来提高代码复用率？请举例说明。
+
+**English Answer:**
+
+I will give two examples from real work.
+
+**Example 1 — Template Method Pattern for REST API controllers:**
+
+Every controller in our system does the same 4 steps: validate input → call service → handle exception → return response. Instead of repeating this in every controller, we use a base class:
+
+```java
+public abstract class BaseApiController<T, R> {
+    protected abstract T serviceCall(R request);    // subclasses implement this
+
+    public ApiResponse<T> handle(R request) {
+        validate(request);              // same for all
+        T result = serviceCall(request); // different per controller
+        return ApiResponse.ok(result); // same for all
+    }
+}
+
+@RestController
+@RequestMapping("/api/v1/orders")
+public class OrderController extends BaseApiController<OrderDto, OrderRequest> {
+    @Override
+    protected OrderDto serviceCall(OrderRequest request) {
+        return orderService.createOrder(request);
+    }
+}
+```
+
+Now if we need to add request logging or audit, we only change one place.
+
+**Example 2 — Strategy Pattern for fee calculation:**
+
+Different fund products charge fees differently. Instead of if-else:
+
+```java
+public interface FeeCalculationStrategy {
+    Money calculate(Order order, Fund fund);
+}
+
+@Service
+public class PercentageFeeStrategy implements FeeCalculationStrategy {
+    public Money calculate(Order order, Fund fund) {
+        return order.getAmount().multiply(fund.getFeeRate());
+    }
+}
+
+@Service
+public class FlatFeeStrategy implements FeeCalculationStrategy {
+    public Money calculate(Order order, Fund fund) {
+        return fund.getFlatFee();
+    }
+}
+
+// Inject the right strategy
+@Autowired
+private Map<String, FeeCalculationStrategy> strategies; // Spring auto-injects all
+
+public Money computeFee(Order order, Fund fund) {
+    FeeCalculationStrategy strategy = strategies.get(fund.getFeeType());
+    return strategy.calculate(order, fund);
+}
+```
+
+Now adding a new fee type only requires adding a new class, not modifying existing code (Open/Closed Principle).
+
+**中文解释：**
+
+**模板方法模式**：所有Controller都执行"校验→调用Service→处理异常→返回"，抽象到BaseController，新Controller只需实现具体Service调用逻辑，公共逻辑一处修改全局生效。
+
+**策略模式**：不同基金产品费率计算方式不同（按比例/固定额），定义FeeCalculationStrategy接口，每种策略一个实现类，Spring自动注入所有策略到Map，按fund类型动态选取。添加新品种只需新增策略类，不动现有代码（开闭原则）。
+
+---
+
+### Q39. How do you handle database transactions that span multiple services (distributed transactions)?
+
+### 问题39：如何处理跨多个服务的数据库事务（分布式事务）？
+
+**English Answer:**
+
+In a microservices system, one business operation often touches multiple databases. A "transfer" operation needs to debit Account A and credit Account B — but Account A is in `user-service` and Account B is in `order-service`. You cannot use a single ACID transaction.
+
+**Two main approaches:**
+
+**Approach 1 — Saga Pattern (preferred for most cases):**
+
+The operation is broken into a sequence of local transactions. Each step publishes an event; the next step listens and proceeds. If any step fails, **compensation transactions** undo the previous steps.
+
+```
+Happy path:
+  Step 1: Reserve funds (local DB commit)         → publishes ReserveCompleted
+  Step 2: Create order (local DB commit)         → publishes OrderCreated
+  Step 3: Confirm transfer (local DB commit)     → publishes TransferConfirmed
+
+Failure at Step 2:
+  Compensation: Undo Step 1 (refund the reservation)
+```
+
+In our system, we use **Choreography-based Saga** with Kafka events:
+
+- Each service owns its local transaction
+- Each service publishes events that trigger the next service
+- If a service fails, it publishes a compensating event
+
+**Approach 2 — Two-Phase Commit (2PC) (rarely used):**
+
+A coordinator asks all services to "prepare." If all say yes, the coordinator tells them all to "commit." If any says no, all roll back.
+
+Problem: If the coordinator crashes after "prepare" but before "commit," services are stuck waiting. Also, all databases must support XA (not all do). We avoid 2PC in our architecture.
+
+**中文解释：**
+
+跨服务事务不能用本地ACID事务，需要分布式事务方案：
+
+**Saga模式（我们采用）**：将操作拆成一系列本地事务，每步成功则发布事件触发下一步，失败则执行补偿事务（撤销前几步）。用Kafka事件实现 choreography-based Saga，详见上文示例。
+
+**两阶段提交（2PC）**：协调者先问所有服务"准备好了吗"，全部确认后才"提交"。缺点：协调者崩溃时服务卡死；需要数据库支持XA协议。实际生产中极少使用。
+
+---
+
+### Q40. How do you connect a React frontend to a Spring Boot backend? Walk me through the flow.
+
+### 问题40：React 前端如何连接 Spring Boot 后端？请描述整个调用链路。
+
+**English Answer:**
+
+Here is the full flow from React button click to Spring Boot response:
+
+**Step 1 — React component calls the API:**
+
+```jsx
+// React: call the backend API
+const [funds, setFunds] = useState([]);
+
+useEffect(() => {
+  fetch('http://localhost:8080/api/v1/funds')
+    .then(res => res.json())
+    .then(data => setFunds(data));
+}, []);
+
+return funds.map(fund => <FundCard key={fund.code} fund={fund} />);
+```
+
+**Step 2 — Spring Boot Controller receives the request:**
+
+```java
+@RestController
+@RequestMapping("/api/v1/funds")
+@RequiredArgsConstructor
+public class FundController {
+    private final FundService fundService;
+
+    @GetMapping
+    public ResponseEntity<List<FundDto>> getAllFunds() {
+        List<FundDto> funds = fundService.getAllFunds();
+        return ResponseEntity.ok(funds);  // returns JSON
+    }
+}
+```
+
+**Step 3 — CORS configuration (Spring Boot must allow React):**
+
+```java
+@Configuration
+public class WebConfig implements WebMvcConfigurer {
+    @Override
+    public void addCorsMappings(CorsRegistry registry) {
+        registry.addMapping("/api/**")
+            .allowedOrigins("http://localhost:3000")  // React dev server
+            .allowedMethods("GET", "POST", "PUT", "DELETE")
+            .allowedHeaders("*");
+    }
+}
+```
+
+**Step 4 — React sends the request with JWT token:**
+
+```jsx
+const response = await fetch('http://localhost:8080/api/v1/orders', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': 'Bearer ' + jwtToken  // JWT from login
+  },
+  body: JSON.stringify(orderRequest)
+});
+```
+
+**Step 5 — Spring Security validates the JWT and extracts user info:**
+
+```java
+SecurityFilterChain {
+    http.addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
+        .authorizeHttpRequests(auth -> auth
+            .requestMatchers("/api/v1/funds/**").permitAll()
+            .requestMatchers("/api/v1/orders/**").authenticated()
+        );
+}
+```
+
+**Step 6 — Response returns JSON to React:**
+
+```json
+HTTP 200 OK
+Content-Type: application/json
+
+[
+  { "code": "FUND_A", "name": "Global Tech Fund", "price": 12.50 },
+  { "code": "FUND_B", "name": "Bond Saver", "price": 9.80 }
+]
+```
+
+**中文解释：**
+
+React调用Spring Boot后端的完整链路：
+
+1. **React**: `fetch('/api/v1/funds')` 发起HTTP请求
+2. **Spring Boot**: `@RestController` 接收请求，调用Service层，返回JSON
+3. **CORS配置**: 后端必须允许前端域名（开发环境`localhost:3000`）
+4. **JWT认证**: 敏感API需要在请求头带`Authorization: Bearer <token>`
+5. **Spring Security**: 过滤器链验证JWT token，确认用户身份
+6. **返回**: 后端返回JSON，前端用`res.json()`解析并更新UI状态
+
+---
+
+### Q41. What is the difference between `useState` and `useEffect` in React? Give an example.
+
+### 问题41：React 中 `useState` 和 `useEffect` 的区别是什么？请举例。
+
+**English Answer:**
+
+**`useState`** = stores data that changes over time (like a variable, but changing it causes the component to re-render).
+
+**`useEffect`** = runs side effects after the component renders (like fetching data, setting up timers, subscribing to events).
+
+```jsx
+function FundList() {
+    // useState: stores the list of funds
+    const [funds, setFunds] = useState([]);    // funds = [], setFunds is the updater
+
+    // useEffect: runs AFTER the first render (and whenever deps change)
+    useEffect(() => {
+        // Fetch data from backend when component mounts
+        fetch('http://localhost:8080/api/v1/funds')
+            .then(res => res.json())
+            .then(data => setFunds(data));
+
+        // Cleanup function (runs when component unmounts)
+        return () => {
+            console.log('Component will unmount — clean up');
+        };
+    }, []);  // [] = empty deps = run only once after first render
+
+    return (
+        <div>
+            {funds.map(fund => (
+                <FundCard key={fund.code} name={fund.name} price={fund.price} />
+            ))}
+        </div>
+    );
+}
+```
+
+**Three ways to write `useEffect` with dependency array:**
+
+| Syntax               | When it runs                                      |
+| -------------------- | ------------------------------------------------- |
+| `useEffect(fn, [])`  | Only once after first render (good for `fetch`)   |
+| `useEffect(fn, [x])` | After first render AND every time `x` changes     |
+| `useEffect(fn)`      | After every render (rarely what you want — avoid) |
+
+**Common mistake:** Putting an object in the dependency array can cause an infinite loop because a new object is created on every render. Use primitive values or use `useMemo`.
+
+**中文解释：**
+
+- **`useState`**：声明组件内部状态，状态变化触发组件重新渲染（类似Vue的`data()`）。
+- **`useEffect`**：副作用钩子，在组件渲染后执行，常用于数据获取、订阅、定时器。
+
+常见用法：
+
+- `useEffect(fn, [])`：只在首次渲染后执行（适合`fetch`初始化数据）
+- `useEffect(fn, [count])`：首次渲染 + `count`变化时执行
+- `useEffect(fn)`：每次渲染都执行（慎用，可能导致无限循环）
+
+**常见错误**：把对象放入依赖数组（每次渲染创建新对象），会导致无限循环。依赖数组应放原始类型值。
+
+---
+
+### Q42. What is React.memo and when would you use it?
+
+### 问题42：React.memo 是什么？什么时候应该使用它？
+
+**English Answer:**
+
+**React.memo** is a performance optimization. It memoizes (caches) a component's output. If the component's **props don't change**, React reuses the last rendered result instead of re-rendering the component.
+
+**Without React.memo:**
+
+```jsx
+function FundRow({ fund }) {
+    // This re-renders every time ANY parent component re-renders
+    return <tr><td>{fund.name}</td><td>{fund.price}</td></tr>;
+}
+```
+
+**With React.memo:**
+
+```jsx
+const FundRow = React.memo(function FundRow({ fund }) {
+    // Only re-renders if `fund` prop actually changes
+    return <tr><td>{fund.name}</td><td>{fund.price}</td></tr>;
+});
+```
+
+**When to use it:**
+
+- The component renders **frequently** (e.g., a table with 100 rows, each row re-renders on parent state change)
+- The component does **expensive computation** (chart rendering, data processing)
+- The component receives **the same props repeatedly** (list items in a stable list)
+
+**When NOT to use it:**
+
+- The component is **lightweight** (memoization overhead > rendering cost)
+- Props **always change** (no cache hits, just wasted memo cost)
+- Don't use it as a default — measure first with React DevTools Profiler
+
+**中文解释：**
+
+React.memo 是一个性能优化工具，可以缓存组件渲染结果。如果组件的props没有变化，React会跳过渲染，直接复用上次的结果。
+
+适用场景：表格行组件（父组件状态变化时避免所有行都重渲染）、做复杂计算的子组件（图表渲染）、列表项（props稳定不变时效果最好）。
+
+禁用场景：组件本身很轻量（memo的开销反而更大）、props每次都变（缓存命中率为0）。
+
+---
+
+### Q43. How do you manage state in React when you have many components that need to share data?
+
+### 问题43：React 中多个组件需要共享状态时，你们怎么管理？
+
+**English Answer:**
+
+There are three main approaches, depending on how widely the data needs to be shared:
+
+**1. Props drilling (simple, for small apps):**
+
+```jsx
+// Pass data from parent to deeply nested child via props
+<App>
+  <Header user={user} />           // passes user down
+    <Nav user={user} />             // passes user down again
+      <Profile user={user} />       // finally uses user
+```
+
+Problem: If `Profile` is 5 levels deep and `App` is the only place with `user`, you pass `user` through 4 intermediate components that don't need it.
+
+**2. Context API (medium complexity, for cross-cutting data):**
+
+```jsx
+// Create a context
+const UserContext = createContext(null);
+
+// Provide it at the top level
+function App() {
+  const [user, setUser] = useState(currentUser);
+  return (
+    <UserContext.Provider value={{ user, setUser }}>
+      <Dashboard />
+    </UserContext.Provider>
+  );
+}
+
+// Use it in any nested component — no props needed
+function Profile() {
+  const { user, setUser } = useContext(UserContext);
+  return <div>Hello {user.name}</div>;
+}
+```
+
+Best for: logged-in user data, theme, language preference — data that many unrelated components need.
+
+**3. State management library like Zustand (complex apps):**
+
+For large apps with many entities and complex interactions:
+
+```jsx
+// Store definition
+const useOrderStore = create((set) => ({
+  orders: [],
+  addOrder: (order) => set(state => ({ orders: [...state.orders, order] })),
+}));
+
+// In any component
+function OrderList() {
+  const { orders, addOrder } = useOrderStore();
+  return orders.map(o => <OrderRow key={o.id} order={o} />);
+}
+```
+
+**中文解释：**
+
+React状态共享三板斧：
+
+1. **Props逐层传递**：简单，但多层嵌套时中间层被迫接收不需要的props（prop drilling），维护噩梦。
+2. **Context API**：跨组件共享全局数据（用户登录态、主题、语言），在顶级Provider注入，子组件随时`useContext`取用，适合中等复杂度应用。
+3. **Zustand等状态管理库**：复杂应用（多实体、频繁交互），集中管理所有状态，组件直接订阅，状态变更自动触发相关组件重渲染。
+
+金融系统典型用法：用户登录态用Context，订单列表/持仓数据用Zustand。
+
+---
+
+### Q44. How do you handle form validation in React and Spring Boot at the same time?
+
+### 问题44：React 和 Spring Boot 的表单校验如何同时处理？
+
+**English Answer:**
+
+We validate on **both sides** — client-side for UX (instant feedback) and server-side for security (never trust the client).
+
+**React — Client-side validation:**
+
+```jsx
+function OrderForm() {
+    const [amount, setAmount] = useState('');
+    const [error, setError] = useState('');
+
+    const validate = (value) => {
+        const num = parseFloat(value);
+        if (!value) return 'Amount is required';
+        if (isNaN(num)) return 'Must be a number';
+        if (num < 100) return 'Minimum amount is 100';
+        if (num > 1000000) return 'Maximum amount is 1,000,000';
+        return '';
+    };
+
+    return (
+        <div>
+            <input
+                value={amount}
+                onChange={e => {
+                    setAmount(e.target.value);
+                    setError(validate(e.target.value));  // validate on change
+                }}
+            />
+            {error && <span style={{color:'red'}}>{error}</span>}
+        </div>
+    );
+}
+```
+
+**Spring Boot — Server-side validation (authoritative):**
+
+```java
+@PostMapping("/orders")
+public ResponseEntity<OrderResponse> placeOrder(
+        @Valid @RequestBody @NotNull OrderRequest request,
+        BindingResult result) {
+
+    if (result.hasErrors()) {
+        return ResponseEntity.badRequest()
+            .body(OrderResponse.error(result.getFieldErrors()));
+    }
+    return ResponseEntity.ok(orderService.createOrder(request));
+}
+```
+
+```java
+// Validation annotations on the DTO
+public class OrderRequest {
+    @NotNull(message = "Amount is required")
+    @DecimalMin(value = "100.00", message = "Minimum amount is 100")
+    @DecimalMax(value = "1000000.00", message = "Maximum is 1,000,000")
+    private BigDecimal amount;
+
+    @NotBlank(message = "Fund code is required")
+    private String fundCode;
+}
+```
+
+**Why both sides?**
+
+- Client-side: better UX, instant feedback, no network round-trip
+- Server-side: **security** — a malicious user can bypass React DevTools and send any payload directly to the API. Server-side validation is the real wall.
+
+**中文解释：**
+
+两端校验，缺一不可：
+
+- **前端校验**：改善用户体验，输入时即时反馈，不需要等网络往返。
+- **后端校验**：唯一可信数据源，恶意用户可以直接用curl/Postman绕过前端发送任意数据，后端校验才是真正的安全防线。
+
+Spring Boot用`@Valid`注解+Bean Validation注解（`@NotNull`、`@DecimalMin`）自动校验请求体，校验失败返回400和详细错误信息。
+
+---
+
+### Q45. How do you Dockerize a Spring Boot application? Walk me through the Dockerfile.
+
+### 问题45：如何将 Spring Boot 应用 Docker 化？请讲解 Dockerfile 的写法。
+
+**English Answer:**
+
+Here is a standard multi-stage Dockerfile for a Spring Boot application:
+
+```dockerfile
+# Stage 1: Build the application
+FROM maven:3.9-eclipse-temurin-21 AS builder
+WORKDIR /app
+# Copy pom.xml first (layer caching — Maven deps are downloaded only when pom.xml changes)
+COPY pom.xml .
+RUN mvn dependency:go-offline  # download all dependencies
+COPY src ./src
+RUN mvn package -DskipTests    # build JAR, skip tests in build stage
+
+# Stage 2: Runtime — small image, only the JAR
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+# Copy only the JAR from the build stage
+COPY --from=builder /app/target/myapp.jar app.jar
+# Copy config (can be overridden at runtime with volume mount)
+COPY src/main/resources/application-prod.yml config/
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar", "--spring.config.location=config/"]
+```
+
+**Key decisions explained:**
+
+| Line                            | Why                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------- |
+| `maven:3.9-eclipse-temurin-21`  | Full Maven for building (JDK 21 matches production)                             |
+| Multi-stage build               | Build stage is heavy; runtime stage uses slim JRE image — final image is ~200MB |
+| Layer caching                   | `pom.xml` copied first, then source — Maven deps cached, fast rebuilds          |
+| `eclipse-temurin:21-jre-alpine` | Alpine Linux JRE — tiny image (~80MB), smaller attack surface                   |
+| `--from=builder`                | Only the JAR is copied to runtime stage; build tools are excluded               |
+
+**Build and run commands:**
+
+```bash
+# Build
+docker build -t smart-invest/user-service:1.0.0 .
+
+# Run locally (simulating production config)
+docker run -p 8080:8080 \
+  -e SPRING_PROFILES_ACTIVE=prod \
+  -e DATABASE_URL=jdbc:postgresql://host.docker.internal:5432/smartinvest \
+  smart-invest/user-service:1.0.0
+```
+
+**中文解释：**
+
+Dockerfile核心要点：
+
+- **多阶段构建**：Build阶段用Maven+JDK 21打包，Runtime阶段用精简JRE镜像（Alpine Linux，约80MB），最终镜像比Build阶段小得多。
+- **层缓存优化**：`pom.xml`先复制、先下载依赖，再复制源码——pom不变时构建命中缓存，速度极快。
+- **最小权限镜像**：Alpine Linux + JRE（非JDK），攻击面最小化。
+- **`--from=builder`**：只把JAR文件复制到运行镜像，Build工具不进入最终镜像。
+
+---
+
+### Q46. What is the difference between Docker `COPY` and `ADD`? When would you use each?
+
+### 问题46：Dockerfile 中 `COPY` 和 `ADD` 的区别是什么？各在什么场景使用？
+
+**English Answer:**
+
+Both copy files from the host into the Docker image, but with important differences:
+
+| Instruction | What it does                                          | When to use                             |
+| ----------- | ----------------------------------------------------- | --------------------------------------- |
+| `COPY`      | Copies files/directories from the build context       | Preferred for most cases                |
+| `ADD`       | Copies files AND can extract tar files AND fetch URLs | Only for .tar extraction or remote URLs |
+
+```dockerfile
+# Preferred: simple file copy
+COPY target/myapp.jar /app/app.jar
+COPY config/ /app/config/
+
+# Only use ADD for these two special cases:
+ADD app.tar.gz /app/          # auto-extracts tar.gz into /app/
+ADD https://example.com/file.zip /app/  # downloads and copies
+```
+
+**Why prefer COPY?**
+
+- `COPY` is **explicit** — you always know exactly what you're copying.
+- `ADD` has hidden behavior (auto-extraction) that can cause confusion.
+- `ADD` can fetch from URLs, which makes the build context less predictable.
+- Security scanners work better with `COPY` because the source is always local.
+
+**Best practice:** Use `COPY` 99% of the time. Use `ADD` only when you genuinely need tar extraction.
+
+**中文解释：**
+
+- **`COPY`**：简单复制，推荐使用，行为可预测。
+- **`ADD`**：除了复制，还能自动解压tar.gz文件，或从远程URL下载文件。
+
+大多数场景用`COPY`即可。只有需要解压tar包时才用`ADD`（`ADD app.tar.gz /app/`）。`ADD`从URL下载文件容易引入不确定性和安全风险，慎用。
+
+---
+
+### Q47. You have a memory leak in a Java application running in Docker. How do you diagnose it?
+
+### 问题47：Java 应用在 Docker 中出现了内存泄漏，你如何排查？
+
+**English Answer:**
+
+Here is my step-by-step diagnosis process:
+
+**Step 1 — Check if it's really a memory leak (not just normal high usage):**
+
+```bash
+# Check container memory usage — is it growing continuously?
+docker stats --no-stream smart-invest-user-service
+
+# Check container memory limit
+docker inspect smart-invest-user-service | grep Memory
+# If memory usage hits the limit → OOMKilled (exit code 137)
+```
+
+**Step 2 — Enable JVM heap dumps in Docker:**
+
+```yaml
+# docker-compose or K8s pod spec
+env:
+  - name: JAVA_OPTS
+    value: "-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/dumps/ -XX:+UseG1GC"
+```
+
+**Step 3 — Get a heap dump from inside the container:**
+
+```bash
+# Find the JVM PID inside the container
+docker exec smart-invest-user-service jcmd | grep java
+
+# Trigger a heap dump (if OOM already happened, it's already in /dumps/)
+docker exec smart-invest-user-service jcmd <pid> GC.heap_dump /dumps/heap.hprof
+
+# Copy it out of the container
+docker cp smart-invest-user-service:/dumps/heap.hprof ./heap.hprof
+```
+
+**Step 4 — Analyze the heap dump:**
+
+```bash
+# Use Eclipse Memory Analyzer (MAT) — free tool
+# Open heap.hprof in MAT and look for:
+# 1. "Leak Suspects" — objects that are suspiciously large
+# 2. "Top Consumers" — biggest objects by shallow size
+# 3. "Dominator Tree" — who holds the biggest object graph
+```
+
+**Step 5 — Common Java memory leak causes in Spring Boot:**
+
+| Cause                              | Symptom                                              | Fix                                             |
+| ---------------------------------- | ---------------------------------------------------- | ----------------------------------------------- |
+| Unclosed `EntityManager`/`Session` | Hibernate session never closed                       | Use `@Transactional`, always close in `finally` |
+| Static `Map` accumulating data     | Cache grows forever without eviction                 | Use `Cache eviction` or TTL                     |
+| `ThreadLocal` not cleaned up       | Thread pool reused, but ThreadLocal holds references | Always call `ThreadLocal.remove()` in filter    |
+| Large list without pagination      | Query returns 10M rows, OOM                          | Add `Pageable` to repository methods            |
+
+**中文解释：**
+
+Java内存泄漏排查步骤：
+
+1. **确认是泄漏**：`docker stats`观察内存是否持续增长到上限
+2. **开启堆转储**：JVM参数`-XX:+HeapDumpOnOutOfMemoryError`让OOM时自动生成`.hprof`文件
+3. **导出分析**：用`jcmd <pid> GC.heap_dump`手动触发，用Eclipse MAT工具打开分析"泄漏嫌疑人"和"最大消耗对象"
+4. **常见原因**：EntityManager未关闭、静态Map无限累积、ThreadLocal未清理、大查询无分页
+
+---
+
+### Q48. How do you write a JUnit 5 test that verifies a method throws an exception correctly?
+
+### 问题48：如何用 JUnit 5 写一个测试，验证方法正确抛出了异常？
+
+**English Answer:**
+
+In JUnit 5, you use `assertThrows` from `org.junit.jupiter.api.Assertions`:
+
+```java
+import static org.junit.jupiter.api.Assertions.*;
+
+@ExtendWith(MockitoExtension.class)
+class OrderServiceTest {
+
+    @Mock
+    private OrderRepository orderRepository;
+
+    @InjectMocks
+    private OrderService orderService;
+
+    @Test
+    void shouldThrowExceptionWhenAmountIsBelowMinimum() {
+        // Arrange
+        OrderRequest request = new OrderRequest();
+        request.setAmount(new BigDecimal("50"));  // minimum is 100
+
+        // Act & Assert — assertThrows captures the exception
+        OrderValidationException ex = assertThrows(
+            OrderValidationException.class,       // expected exception type
+            () -> orderService.placeOrder(request) // lambda: call the method
+        );
+
+        // Also verify the exception message
+        assertEquals("Amount must be at least 100", ex.getMessage());
+    }
+
+    @Test
+    void shouldThrowExceptionWhenFundCodeIsBlank() {
+        OrderRequest request = new OrderRequest();
+        request.setAmount(new BigDecimal("500"));
+        request.setFundCode(null);
+
+        OrderValidationException ex = assertThrows(
+            OrderValidationException.class,
+            () -> orderService.placeOrder(request)
+        );
+
+        assertTrue(ex.getMessage().contains("fund code"));
+    }
+}
+```
+
+**Other useful JUnit 5 assertions:**
+
+```java
+// Test that an exception IS NOT thrown (happy path verification)
+assertDoesNotThrow(() -> orderService.placeOrder(validRequest));
+
+// Test multiple exceptions in the same test
+assertAll(
+    () -> assertThrows(ValidationException.class, () -> method(null)),
+    () -> assertThrows(ValidationException.class, () -> method(""))
+);
+
+// Test that code takes too long (performance test)
+assertTimeout(Duration.ofMillis(100), () -> service.fastOperation());
+```
+
+**中文解释：**
+
+JUnit 5 用 `assertThrows` 捕获并验证异常：
+
+- **第一个参数**：期望的异常类型
+- **第二个参数**：lambda表达式调用被测方法
+- **assertEquals**：进一步验证异常消息内容
+
+常用变体：`assertDoesNotThrow`（验证正常路径不抛异常）、`assertAll`（一个测试验证多个断言）、`assertTimeout`（验证执行时间不超时）。
+
+---
+
+### Q49. What is the difference between mocking with `@Mock` and `@MockBean` in Spring Boot testing?
+
+### 问题49：Spring Boot 测试中 `@Mock` 和 `@MockBean` 的区别是什么？
+
+**English Answer:**
+
+Both create fake (mock) objects, but they serve different purposes.
+
+|                    | `@Mock` (Mockito)                     | `@MockBean` (Spring Boot)                               |
+| ------------------ | ------------------------------------- | ------------------------------------------------------- |
+| **Framework**      | Mockito                               | Spring Boot Test                                        |
+| **Scope**          | Unit test — only the test class       | Integration test — Spring context                       |
+| **Use when**       | Testing a single service in isolation | Replacing a real Spring bean in the application context |
+| **Spring context** | Does NOT start Spring context         | Starts full Spring context with mocked bean             |
+
+**`@Mock` — Unit test (fast, no Spring):**
+
+```java
+@ExtendWith(MockitoExtension.class)
+class OrderServiceTest {
+    @Mock
+    private FundClient fundClient;      // fake — no real HTTP call
+
+    @Mock
+    private OrderRepository orderRepository;  // fake — no real DB
+
+    @InjectMocks
+    private OrderService orderService;   // real service with mocks injected
+
+    @Test
+    void shouldPlaceOrder() {
+        when(fundClient.getPrice("FUND_A")).thenReturn(new BigDecimal("12.50"));
+        // ... test real business logic, no Spring needed
+    }
+}
+```
+
+**`@MockBean` — Integration test (slower, but full Spring context):**
+
+```java
+@SpringBootTest
+@AutoConfigureMockMvc
+class OrderControllerIntegrationTest {
+    @MockBean
+    private FundClient fundClient;  // replaces the real FundClient in Spring context
+
+    @Autowired
+    private MockMvc mockMvc;       // test HTTP layer
+
+    @Test
+    void shouldReturn400WhenValidationFails() throws Exception {
+        when(fundClient.getPrice(any())).thenReturn(new BigDecimal("12.50"));
+        mockMvc.perform(post("/api/v1/orders")
+                .contentType("application/json")
+                .content("{\"amount\": 50}"))
+            .andExpect(status().isBadRequest());  // 400
+    }
+}
+```
+
+**Rule of thumb:** Start with `@Mock` (unit tests) for business logic. Use `@MockBean` when you need to test how the HTTP layer interacts with your service.
+
+**中文解释：**
+
+- **`@Mock`**：Mockito提供，只在当前测试类生效，不启动Spring容器，速度快，用于纯业务逻辑单元测试。
+- **`@MockBean`**：Spring Boot Test提供，替换Spring容器中的真实Bean，启动完整Spring上下文，速度较慢，用于测试HTTP层和Spring Bean的集成。
+
+实际选择：业务逻辑用`@Mock`（快，隔离），Controller/Service集成测试用`@MockBean`（需要真实Spring上下文）。
+
+---
+
+### Q50. What is the difference between Scrum and Kanban? Which do you prefer and why?
+
+### 问题50：Scrum 和 Kanban 的区别是什么？你更倾向于哪个？
+
+**English Answer:**
+
+Both are Agile frameworks, but they work very differently.
+
+| Aspect                   | Scrum                                         | Kanban                                               |
+| ------------------------ | --------------------------------------------- | ---------------------------------------------------- |
+| **Cadence**              | Fixed sprints (2-3 weeks)                     | Continuous flow, no fixed sprints                    |
+| **Roles**                | Scrum Master, Product Owner, Dev Team         | No required roles — just WIP limits                  |
+| **Planning**             | Sprint planning at start of sprint            | Prioritize continuously                              |
+| **Change during sprint** | Avoid — sprint is committed                   | Can change anytime — WIP limits protect flow         |
+| **Best for**             | Product development with predictable releases | Operations/maintenance teams, frequent interruptions |
+| **Board**                | 3 columns: To Do / In Progress / Done         | Custom columns + explicit WIP limits per column      |
+
+**In our team:**
+
+We use **Scrum** for new feature development:
+
+- 2-week sprints
+- Sprint planning: "What can we commit to finishing this sprint?"
+- Daily standup: "What did I do? What will I do? Any blockers?"
+- Sprint review: demo to product owner
+- Retrospective: "How can we improve?"
+
+We use **Kanban** for production support (bug fixes, hotfixes):
+
+- Bugs go directly into the "In Progress" column
+- WIP limit of 3 bugs per developer
+- When a developer finishes a feature, they pick up the next bug
+
+**中文解释：**
+
+| 维度   | Scrum（迭代式）           | Kanban（流动式）      |
+| ---- | -------------------- | ---------------- |
+| 周期   | 固定冲刺（2-3周）           | 持续流动，无固定冲刺       |
+| 角色   | Scrum Master、PO、开发团队 | 无强制角色，靠WIP限制管理   |
+| 变更处理 | 冲刺内尽量不变更             | 随时可以插入新任务        |
+| 适用场景 | 新功能开发，需要可预测的发布节奏     | 运维/支持团队，频繁被打断的场景 |
+
+我们团队：新产品开发用Scrum（有承诺有节奏），生产支持/紧急修复用Kanban（灵活响应）。
+
+---
+
+### Q51. What does a typical Code Review look like in your team? What do you look for as a reviewer?
+
+### 问题51：你们团队的 Code Review 是怎么做的？作为 reviewer 你重点看什么？
+
+**English Answer:**
+
+In our team, every change requires at least **one approval** before merging to `main`. Here's our process:
+
+**As a PR author, I make sure to:**
+
+1. Keep the PR small — one feature or one bug fix, max ~400 lines changed
+2. Write a clear description: "What changed, why, and how to test it"
+3. Attach screenshots if it changes UI
+4. Self-review the diff before asking others — read it as if you're the reviewer
+
+**As a reviewer, I check five things:**
+
+**1. Correctness — does it do what it says?**
+
+```java
+// Red flag: method name says "get" but it modifies state
+public User getUser(String id) {
+    this.lastAccessTime = now();  // ❌ Side effect in a "get" method
+    return userRepository.findById(id);
+}
+```
+
+**2. Security — is there a vulnerability?**
+
+```java
+// Red flag: SQL injection possibility
+@Query("SELECT u FROM User u WHERE u.name = '" + input + "'")  // ❌ String concat
+// Fix: use parameter binding
+@Query("SELECT u FROM User u WHERE u.name = :name")
+```
+
+**3. Test coverage — is it tested?**
+
+- Every new method needs at least one unit test
+- Happy path AND at least one error path
+
+**4. Design — is the code in the right place?**
+
+- Is the logic in the right service/class?
+- Is the database operation in the repository layer, not the controller?
+
+**5. Performance — will it cause problems at scale?**
+
+- N+1 query (looping through a list and calling `findById` inside the loop)
+- Missing database index for a query on a large table
+
+**中文解释：**
+
+PR作者：PR要小（一个功能或一个Bug，最多~400行）、描述清晰（改了什么、为什么改、怎么测试）、附截图、自审一遍。
+
+Reviewer五维检查：正确性（方法名和实现是否一致）、安全性（SQL注入、敏感数据日志）、测试覆盖（新增逻辑必须有测试）、设计（逻辑是否放在正确的层次）、性能（N+1查询、缺失索引）。
+
+**一条重要的reviewer原则**：如果review意见超过10条，说明PR太大，应该拆分成更小的PR。
+
+---
+
+## Quick Reference — New JD Key Technology Choices
+
+## 新 JD 核心技术选型速查
+
+| Technology         | Key Point for Interview                                       |
+| ------------------ | ------------------------------------------------------------- |
+| Spring Boot 3      | Jakarta EE, Java 17+, Micrometer Tracing                      |
+| Spring Cloud       | OpenFeign, Resilience4j, Config Server, Eureka                |
+| Spring Batch       | Chunk processing, restartable, for large data jobs            |
+| Hibernate L1/L2    | L1=session-scoped, L2=application-scoped, stale data risk     |
+| React.js           | useState (state), useEffect (side effects), React.memo (perf) |
+| Context API        | Cross-component state without prop drilling                   |
+| Docker multi-stage | Build stage (Maven+JDK) → Runtime stage (JRE only)            |
+| JUnit 5            | assertThrows, assertDoesNotThrow, assertAll                   |
+| @Mock vs @MockBean | @Mock=unit test (no Spring), @MockBean=integration test       |
+| Scrum vs Kanban    | Scrum=fixed sprints (dev), Kanban=continuous flow (ops)       |
