@@ -1339,16 +1339,16 @@ spring:
 
 **Spring Boot** is a framework to build a single application quickly. It gives you auto-configuration, embedded servers, and production-ready features (actuator, health checks) out of the box.
 
-**Spring Cloud** is a set of tools to coordinate multiple microservices in a distributed system. You need Spring Cloud when you have many services that must work together.
+**Spring Cloud** is a set of tools to help many microservices work together in a distributed system. You need Spring Cloud when you have many services that must call each other.
 
-| Problem                             | Spring Cloud Component          | What It Does                                             |
-| ----------------------------------- | ------------------------------- | -------------------------------------------------------- |
-| Service A calls Service B           | **OpenFeign**                   | Declarative REST client — like writing a local interface |
-| Service B is down                   | **Resilience4j CircuitBreaker** | Prevent cascading failures                               |
-| Too many calls to Service B         | **@Retryable**                  | Automatically retry failed calls                         |
-| Each service has a different config | **Spring Cloud Config**         | Centralized config server, version-controlled            |
-| Finding other services              | **Spring Cloud Netflix Eureka** | Service registry — like a phone book for microservices   |
-| API Gateway                         | **Spring Cloud Gateway**        | Single entry point, routing, rate limiting               |
+| Problem                             | Spring Cloud Component          | What It Does                                         |
+| ----------------------------------- | ------------------------------- | ---------------------------------------------------- |
+| Service A calls Service B           | **OpenFeign**                   | Simple REST client — like writing a local interface  |
+| Service B is down                   | **Resilience4j CircuitBreaker** | Stop failures from spreading to other services       |
+| Too many calls to Service B         | **@Retryable**                  | Automatically retry failed calls                     |
+| Each service has a different config | **Spring Cloud Config**         | Centralized config server — all configs in one place |
+| Finding other services              | **Spring Cloud Netflix Eureka** | Service registry — like a phone book for services    |
+| API Gateway                         | **Spring Cloud Gateway**        | Single entry point, routing, rate limiting           |
 
 **When you need it:** When you have more than 3-5 microservices that call each other. For a simple 2-service app, Spring Boot alone is enough.
 
@@ -1367,7 +1367,7 @@ spring:
 
 **English Answer:**
 
-Spring Batch is a framework for processing **large volumes of data** in a reliable, fault-tolerant way. It is designed for batch jobs — tasks that run on a schedule, process millions of records, and don't need human interaction.
+Spring Batch is a framework for processing **large volumes of data** in a reliable way. It is designed for batch jobs — tasks that run on a schedule, process millions of records, and don't need human interaction.
 
 **Normal Spring Boot service** = handle one request at a time (online/OLTP).
 **Spring Batch job** = process millions of records overnight (offline/OLAP).
@@ -1396,7 +1396,7 @@ For 100 records, `@Scheduled` is fine. For 5 million records, you need:
 
 - Restartable jobs (if the server crashes at record 3 million, resume from there)
 - Chunk-based processing (commit every 100 records, not all 5 million)
-- Skip policy (skip malformed records, don't fail the whole job)
+- Skip policy (skip bad records, don't fail the whole job)
 - Monitoring and restart UI
 
 **中文解释：**
@@ -1425,7 +1425,7 @@ Hibernate sits between your Java code and the database. It uses caching to reduc
 **Second-Level Cache (L2 Cache):**
 
 - Attached to the **SessionFactory** — shared across all sessions (entire application).
-- Must be explicitly enabled. Uses EhCache, Redis, or Infinispan.
+- Must be explicitly enabled manually. Uses EhCache, Redis, or Infinispan.
 - Caches **entities** (entire rows). When any session loads User #1, it's cached for all future sessions.
 - Has a TTL (time-to-live) and a max size.
 
@@ -1440,14 +1440,14 @@ spring.jpa.properties.hibernate.cache.region.factory_class=ehcache
 public class Fund { ... }
 ```
 
-**The stale data problem:**
+**The old data problem:**
 
 If User A changes their email, and User B reads the same User entity from L2 cache 5 seconds later, User B still sees the old email — until the cache expires.
 
 **Solutions:**
 
 1. **Short TTL** — set cache expiry to 30-60 seconds (acceptable for most use cases)
-2. **Cache invalidation on write** — when entity is updated, remove it from cache immediately
+2. **Remove from cache when updated** — when entity is updated, delete it from cache immediately
 3. **READ_WRITE strategy** — Hibernate writes to cache on update, so next read gets fresh data
 4. **For financial data: never cache writes** — disable L2 cache for Order/Portfolio entities
 
@@ -1470,7 +1470,7 @@ Both wrap a method in a database transaction, but with different database access
 
 **`@Transactional` (default, readWrite):**
 
-- The database connection is opened with **write intent**.
+- The database connection is opened with **write intent（意图）**.
 - Hibernate session dirty check is active — any changed entity is automatically flushed to the database at commit.
 - Uses a standard connection from the pool.
 - **Use when:** You are inserting, updating, or deleting data.
@@ -1578,7 +1578,7 @@ public Money computeFee(Order order, Fund fund) {
 }
 ```
 
-Now adding a new fee type only requires adding a new class, not modifying existing code (Open/Closed Principle).
+Now adding a new fee type only requires adding a new class, not modifying existing code.
 
 **中文解释：**
 
@@ -1600,7 +1600,7 @@ In a microservices system, one business operation often touches multiple databas
 
 **Approach 1 — Saga Pattern (preferred for most cases):**
 
-The operation is broken into a sequence of local transactions. Each step publishes an event; the next step listens and proceeds. If any step fails, **compensation transactions** undo the previous steps.
+The operation is broken into a sequence of local transactions. Each step publishes an event; the next step listens and proceeds. If any step fails, **undo steps** reverse the previous steps.
 
 ```
 Happy path:
@@ -1612,7 +1612,7 @@ Failure at Step 2:
   Compensation: Undo Step 1 (refund the reservation)
 ```
 
-In our system, we use **Choreography-based Saga** with Kafka events:
+In our system, we use **event-based Saga** with Kafka events:
 
 - Each service owns its local transaction
 - Each service publishes events that trigger the next service
@@ -1747,7 +1747,7 @@ React调用Spring Boot后端的完整链路：
 
 **`useState`** = stores data that changes over time (like a variable, but changing it causes the component to re-render).
 
-**`useEffect`** = runs side effects after the component renders (like fetching data, setting up timers, subscribing to events).
+**`useEffect`** = runs extra actions after the component renders (like fetching data, setting up timers, subscribing to events).
 
 ```jsx
 function FundList() {
@@ -1761,11 +1761,11 @@ function FundList() {
             .then(res => res.json())
             .then(data => setFunds(data));
 
-        // Cleanup function (runs when component unmounts)
+        // Cleanup when component is removed
         return () => {
             console.log('Component will unmount — clean up');
         };
-    }, []);  // [] = empty deps = run only once after first render
+    }, []);  // [] = empty watch list = run only once after first render
 
     return (
         <div>
@@ -1777,7 +1777,7 @@ function FundList() {
 }
 ```
 
-**Three ways to write `useEffect` with dependency array:**
+**Three ways to write `useEffect` with watch list:**
 
 | Syntax               | When it runs                                      |
 | -------------------- | ------------------------------------------------- |
@@ -1785,7 +1785,7 @@ function FundList() {
 | `useEffect(fn, [x])` | After first render AND every time `x` changes     |
 | `useEffect(fn)`      | After every render (rarely what you want — avoid) |
 
-**Common mistake:** Putting an object in the dependency array can cause an infinite loop because a new object is created on every render. Use primitive values or use `useMemo`.
+**Common mistake:** Putting an object in the watch list can cause an infinite loop because a new object is created on every render. Use primitive values or use `useMemo`.
 
 **中文解释：**
 
@@ -1808,7 +1808,7 @@ function FundList() {
 
 **English Answer:**
 
-**React.memo** is a performance optimization. It memoizes (caches) a component's output. If the component's **props don't change**, React reuses the last rendered result instead of re-rendering the component.
+**React.memo** is a performance optimization. It caches a component's output. If the component's **props don't change**, React reuses the last rendered result instead of re-rendering the component.
 
 **Without React.memo:**
 
@@ -1831,13 +1831,13 @@ const FundRow = React.memo(function FundRow({ fund }) {
 **When to use it:**
 
 - The component renders **frequently** (e.g., a table with 100 rows, each row re-renders on parent state change)
-- The component does **expensive computation** (chart rendering, data processing)
+- The component does **heavy computation** (chart rendering, data processing)
 - The component receives **the same props repeatedly** (list items in a stable list)
 
 **When NOT to use it:**
 
 - The component is **lightweight** (memoization overhead > rendering cost)
-- Props **always change** (no cache hits, just wasted memo cost)
+- Props **always change** (cached version is never reused, just extra work with no benefit)
 - Don't use it as a default — measure first with React DevTools Profiler
 
 **中文解释：**
@@ -1870,7 +1870,7 @@ There are three main approaches, depending on how widely the data needs to be sh
 
 Problem: If `Profile` is 5 levels deep and `App` is the only place with `user`, you pass `user` through 4 intermediate components that don't need it.
 
-**2. Context API (medium complexity, for cross-cutting data):**
+**2. Context API (medium complexity, for shared data):**
 
 ```jsx
 // Create a context
@@ -1964,7 +1964,7 @@ function OrderForm() {
 }
 ```
 
-**Spring Boot — Server-side validation (authoritative):**
+**Spring Boot — Server-side validation (the real check):**
 
 ```java
 @PostMapping("/orders")
@@ -1996,7 +1996,7 @@ public class OrderRequest {
 **Why both sides?**
 
 - Client-side: better UX, instant feedback, no network round-trip
-- Server-side: **security** — a malicious user can bypass React DevTools and send any payload directly to the API. Server-side validation is the real wall.
+- Server-side: **security** — a bad user can bypass React DevTools and send any payload directly to the API. Server-side validation is the real wall.
 
 **中文解释：**
 
@@ -2206,14 +2206,14 @@ class OrderServiceTest {
 
     @Test
     void shouldThrowExceptionWhenAmountIsBelowMinimum() {
-        // Arrange
+        // Setup
         OrderRequest request = new OrderRequest();
         request.setAmount(new BigDecimal("50"));  // minimum is 100
 
-        // Act & Assert — assertThrows captures the exception
+        // Call and check — assertThrows catches the exception
         OrderValidationException ex = assertThrows(
             OrderValidationException.class,       // expected exception type
-            () -> orderService.placeOrder(request) // lambda: call the method
+            () -> orderService.placeOrder(request) // call the method
         );
 
         // Also verify the exception message
@@ -2345,7 +2345,7 @@ Both are Agile frameworks, but they work very differently.
 
 | Aspect                   | Scrum                                         | Kanban                                               |
 | ------------------------ | --------------------------------------------- | ---------------------------------------------------- |
-| **Cadence**              | Fixed sprints (2-3 weeks)                     | Continuous flow, no fixed sprints                    |
+| **Cadence / Rhythm**     | Fixed sprints (2-3 weeks)                     | Continuous flow, no fixed sprints                    |
 | **Roles**                | Scrum Master, Product Owner, Dev Team         | No required roles — just WIP limits                  |
 | **Planning**             | Sprint planning at start of sprint            | Prioritize continuously                              |
 | **Change during sprint** | Avoid — sprint is committed                   | Can change anytime — WIP limits protect flow         |
@@ -2403,7 +2403,7 @@ In our team, every change requires at least **one approval** before merging to `
 ```java
 // Red flag: method name says "get" but it modifies state
 public User getUser(String id) {
-    this.lastAccessTime = now();  // ❌ Side effect in a "get" method
+    this.lastAccessTime = now();  // ❌ Changes state inside a "get" method
     return userRepository.findById(id);
 }
 ```
@@ -2451,8 +2451,8 @@ Reviewer五维检查：正确性（方法名和实现是否一致）、安全性
 | Spring Boot 3      | Jakarta EE, Java 17+, Micrometer Tracing                      |
 | Spring Cloud       | OpenFeign, Resilience4j, Config Server, Eureka                |
 | Spring Batch       | Chunk processing, restartable, for large data jobs            |
-| Hibernate L1/L2    | L1=session-scoped, L2=application-scoped, stale data risk     |
-| React.js           | useState (state), useEffect (side effects), React.memo (perf) |
+| Hibernate L1/L2    | L1=session-scoped, L2=application-scoped, old data risk       |
+| React.js           | useState (state), useEffect (extra actions), React.memo (perf) |
 | Context API        | Cross-component state without prop drilling                   |
 | Docker multi-stage | Build stage (Maven+JDK) → Runtime stage (JRE only)            |
 | JUnit 5            | assertThrows, assertDoesNotThrow, assertAll                   |
