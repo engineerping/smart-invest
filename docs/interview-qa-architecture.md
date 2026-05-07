@@ -1594,7 +1594,7 @@ Now adding a new fee type only requires adding a new class, not modifying existi
 
 **English Answer:**
 
-In a microservices system, one business operation often touches multiple databases. A "transfer" operation needs to debit Account A and credit Account B — but Account A is in `user-service` and Account B is in `order-service`. You cannot use a single ACID transaction.
+In a micro services system, one business operation often touches multiple databases. A "transfer" operation needs to debit Account A and credit Account B — but Account A is in `user-service` and Account B is in `order-service`. You cannot use a single ACID transaction.
 
 **Two main approaches:**
 
@@ -2442,19 +2442,505 @@ Reviewer五维检查：正确性（方法名和实现是否一致）、安全性
 
 ---
 
+## Part 10 — Message Queue Deep Dive（MQ 消息队列深度题）
+
+## 第十部分：消息队列核心问题
+
+> 这五道题是 MQ 生产实践中必须回答的问题，也是面试高频题。每道题都配英文和中文答案。
+
+---
+
+### Q10-1. How do you guarantee that a message is reliably delivered? What if the broker crashes?
+
+### 问题10-1：如何保证消息可靠投递？Broker 崩溃怎么办？
+
+**English Answer:**
+
+Reliable delivery has three parts — the producer side, the broker side, and the consumer side.
+
+**Producer side — don't lose the message before it reaches the broker:**
+
+1. **Use synchronous send with retry.** After calling `send()`, wait for an `ACK` from the broker. If you get a timeout or error, retry with exponential backoff.
+2. **Use a local outbox table (Transactional Outbox Pattern).** Write the message to a database table in the same transaction as your business data. A separate thread (or CDC tool like Debezium) reads the outbox table and sends to the broker. This removes the "dual write" problem — you never have a case where the DB commit succeeded but the message was lost.
+
+```java
+// Transactional Outbox — write message and business data in one DB transaction
+@Transactional
+public void placeOrder(Order order) {
+    orderRepository.save(order);
+    outboxRepository.save(new OutboxEvent("OrderPlaced", order.getId(), toJson(order)));
+    // Outbox relay will pick this up and send to Kafka/MQ
+}
+```
+
+**Broker side — don't lose the message inside the broker:**
+
+- **Kafka**: Set `acks=all` (all in-sync replicas must confirm). Set `replication.factor=3`, `min.insync.replicas=2`. Data is written to disk before ACK.
+- **IBM-MQ**: Use **persistent messages** (`MQPMO_SYNCPOINT`). Messages survive broker restart.
+- **RocketMQ**: Use `SYNC_FLUSH` mode — broker writes to disk synchronously before returning ACK.
+
+**Consumer side — don't lose the message after receiving it:**
+
+- **Do not commit the offset/ACK before processing is complete.** Process first, ACK last.
+- If the consumer crashes mid-processing, the broker re-delivers the message (this is the cause of duplicate consumption — see Q10-2).
+
+**中文解释：**
+
+可靠投递分三段保证：
+
+**生产者侧 — 消息不丢失在发送途中：**
+
+1. **同步发送 + 重试**：`send()` 后等待Broker的ACK，超时或失败则指数退避重试。注意：重试可能导致重复（这是Q10-2的话题）。
+2. **事务性发件箱模式（Transactional Outbox）**：业务数据和消息一起写入同一数据库事务（outbox表），另起一个relay进程从outbox表读取并发送到MQ。彻底消除"数据库提交成功但消息丢失"的问题，是生产级推荐方案。
+
+**Broker侧 — 消息不丢失在Broker内：**
+
+- **Kafka**：`acks=all`，`replication.factor=3`，`min.insync.replicas=2`，消息写入所有ISR副本后才ACK。
+- **IBM-MQ**：使用持久化消息（PERSISTENT），消息写到磁盘，Broker重启后消息仍在。
+- **RocketMQ**：`SYNC_FLUSH` 模式，Broker同步刷盘后才返回ACK（代价是写入延迟略高）。
+
+**消费者侧 — 消息不丢失在处理中：**
+
+- **先处理，后提交offset/ACK**。不能先提交再处理——一旦提交后服务崩溃，消息就永久丢失了。
+- 先处理后提交的代价：崩溃重启后消息会被重新投递，产生重复消费（Q10-2处理）。
+
+**面试口诀**：生产者用Outbox，Broker开持久化+多副本，消费者先处理后ACK。
+
+---
+
+### Q10-2. How do you handle duplicate message consumption (idempotency)?
+
+### 问题10-2：如何处理重复消费？（幂等性设计）
+
+**English Answer:**
+
+Duplicate messages are **unavoidable** in any distributed system. The network can fail after the broker sends a message but before the consumer ACKs it — so the broker sends it again. The correct solution is to make your consumer **idempotent**: processing the same message twice has the same result as processing it once.
+
+**Three common patterns:**
+
+**1. Database unique constraint (most reliable for financial systems):**
+
+Every message has a unique `messageId`. Before inserting the result, check if a record with that `messageId` already exists. Use a unique index to prevent race conditions.
+
+```java
+// Deduplicate using a processed_events table
+@Transactional
+public void handleOrderPlaced(OrderPlacedEvent event) {
+    if (processedEventRepository.existsById(event.getMessageId())) {
+        log.info("Duplicate message, skipping: {}", event.getMessageId());
+        return;  // idempotent — safe to skip
+    }
+    // Process the business logic
+    portfolioService.updateHolding(event.getOrderId());
+    // Mark as processed in same transaction
+    processedEventRepository.save(new ProcessedEvent(event.getMessageId()));
+}
+```
+
+**2. Idempotent business operation (natural idempotency):**
+
+Design the operation so it is safe to run multiple times. For example, instead of `balance += 100` (not idempotent), use `SET balance = 100 WHERE balance < 100 AND version = 5` (idempotent with optimistic lock). A `status = 'PAID'` update is also idempotent — setting it twice has no effect.
+
+**3. Redis deduplication (high throughput, short TTL):**
+
+```java
+String key = "msg:processed:" + event.getMessageId();
+Boolean isNew = redisTemplate.opsForValue().setIfAbsent(key, "1", Duration.ofHours(24));
+if (Boolean.FALSE.equals(isNew)) {
+    return;  // already processed
+}
+// proceed with business logic
+```
+
+**When to use which:**
+
+| Pattern              | Pros                       | Cons                            |
+| -------------------- | -------------------------- | ------------------------------- |
+| DB unique constraint | Durable, 100% reliable     | Extra DB write per message      |
+| Natural idempotency  | No extra storage           | Requires careful design         |
+| Redis dedup          | Very fast, low DB pressure | Redis data can be lost, has TTL |
+
+For financial transactions (payment, trade execution), always use the DB unique constraint approach. Redis is acceptable for lower-stakes operations like analytics events.
+
+**中文解释：**
+
+重复消费在分布式系统中**无法完全避免**（网络分区、消费者崩溃都会导致消息重投），正确做法是让消费者**幂等**。
+
+**三种主流方案：**
+
+**1. 数据库唯一约束（金融系统首选）：**
+每条消息携带全局唯一的`messageId`，消费前查`processed_events`表，已处理则跳过。用数据库唯一索引防止并发竞争。消息处理和写入`processed_events`放同一个事务，保证原子性。
+
+**2. 业务天然幂等（最优雅）：**
+将操作设计成幂等的。例如：`UPDATE order SET status='PAID' WHERE id=? AND status='PENDING'`（重复执行没有副作用）；使用乐观锁版本号控制更新，天然防重。金融对账、状态机流转通常可以这样设计。
+
+**3. Redis去重（高吞吐量场景）：**
+用`messageId`作为key做`SET NX EX`，已存在则跳过。缺点：Redis持久化配置不当可能丢去重记录；设置TTL后超期会"解禁"重复（所以不适合金融转账）。
+
+**面试答法核心**：幂等性是消费者自己的责任，不能依赖MQ只投一次。`at-least-once` 是所有主流MQ的默认语义，必须在业务层做幂等处理。
+
+---
+
+### Q10-3. How do you guarantee message ordering? What are the trade-offs?
+
+### 问题10-3：如何保证消息顺序？有哪些权衡取舍？
+
+**English Answer:**
+
+Message ordering is one of the hardest problems in distributed messaging. Let's break it down.
+
+**Why ordering is lost:**
+
+- Multiple partitions/queues: Kafka splits a topic into partitions. Producer sends messages to different partitions in parallel — order is not guaranteed across partitions.
+- Multiple consumers: If multiple consumer threads or instances process messages concurrently, they may process out of order even from the same partition.
+- Retry: A failed message gets retried later — it arrives "after" messages that were sent after it.
+
+**Solution 1 — Partition by business key (Kafka best practice):**
+
+All messages for the same "entity" (same order ID, same user ID) must go to the **same partition**. Within a partition, Kafka guarantees order.
+
+```java
+// Producer — use orderId as the partition key
+kafkaTemplate.send("order-events", order.getId().toString(), event);
+// All events for the same order go to the same partition, in order
+```
+
+**Solution 2 — Single queue per entity (IBM-MQ / RocketMQ):**
+
+Use a separate queue or message group for each entity. IBM-MQ supports **message grouping** — messages in the same group are delivered in order to one consumer. RocketMQ has **Message Orderly** — one consumer thread per queue.
+
+```java
+// RocketMQ — consume in order
+@RocketMQMessageListener(
+    topic = "order-topic",
+    consumerGroup = "order-group",
+    consumeMode = ConsumeMode.ORDERLY  // single-threaded per queue
+)
+public class OrderConsumer implements RocketMQListener<OrderEvent> { ... }
+```
+
+**Solution 3 — Sequence number + reorder buffer (complex, use when unavoidable):**
+
+Add a sequence number to each message. Consumer buffers out-of-order messages and processes them in sequence. High complexity — avoid if possible.
+
+**Trade-offs:**
+
+| Approach            | Ordering guarantee | Throughput impact          |
+| ------------------- | ------------------ | -------------------------- |
+| Partition by key    | Per-entity order   | Good (parallel partitions) |
+| Single queue/thread | Global order       | Low (bottleneck)           |
+| Reorder buffer      | Flexible           | High complexity            |
+
+**中文解释：**
+
+**顺序问题的根源：**
+
+- 多分区并行：Kafka一个topic有多个partition，不同partition间无顺序保证。
+- 多消费者并发：多个线程/实例同时处理消息，即使消息有序到达也可能乱序处理。
+- 重试：失败消息重试后"插队"到比它晚发出的消息之后。
+
+**解决方案1 — 按业务Key路由到同一分区（Kafka推荐）：**
+将`orderId`/`userId`作为消息的partition key，同一实体的所有消息路由到同一partition。Kafka保证单partition内有序，多partition间并发处理提升吞吐量。**适用于99%的业务顺序场景**（只需保证同一实体的消息有序，不需要全局顺序）。
+
+**解决方案2 — 消息分组/顺序消费（IBM-MQ / RocketMQ）：**
+IBM-MQ的Message Group，同一Group内消息按顺序投递给同一个消费者。RocketMQ的`ORDERLY`消费模式，每个queue分配一个消费线程，保证queue内顺序。
+
+**关键权衡：**
+
+- 全局顺序（所有消息都有序）= 只能用一个queue/partition = 吞吐量瓶颈，生产上**几乎不用**。
+- 分区顺序（同Key消息有序）= 多partition并行 = 满足绝大多数业务需求，**推荐**。
+
+**面试陷阱**：不要说"用单线程消费保证顺序"——这是以牺牲吞吐量换顺序，面试官会追问"那如果QPS很高怎么办"。正确答案是**分区顺序 + 按业务Key路由**。
+
+---
+
+### Q10-4. How do you handle a message backlog (messages piling up faster than they are consumed)?
+
+### 问题10-4：如何处理消息积压问题？
+
+**English Answer:**
+
+A message backlog happens when producers send faster than consumers can process. This is a serious incident — in a financial system it means delayed trades, slow order processing, and angry users.
+
+**Step 1 — Diagnose first:**
+
+- Is this a sudden spike in producers (e.g., market open, batch job started)?
+- Is this a consumer slowdown (e.g., downstream database is slow, a new code deployment introduced a bug)?
+- What is the consumer lag in each partition/queue?
+
+```bash
+# Kafka — check consumer group lag
+kafka-consumer-groups.sh --bootstrap-server kafka:9092 \
+  --group order-consumer-group --describe
+# Look at LAG column — how many messages are behind
+```
+
+**Step 2 — Emergency relief (scale up consumers):**
+
+- **Add more consumer instances** (if stateless and idempotent). For Kafka: add more consumer instances up to the number of partitions. For IBM-MQ: add more competing consumers.
+- **Increase consumer thread count** in the short term.
+- If partitions are the bottleneck (all instances assigned, still slow): **increase partition count** (for Kafka). Note: this is a structural change, plan carefully.
+
+**Step 3 — Fix the root cause:**
+
+- If consumers are slow due to a database bottleneck: add a read replica, add cache (Redis), or batch-process instead of one-by-one.
+- If a code bug caused consumer crash loops: fix the bug and redeploy.
+- If producers legitimately increased: permanent capacity increase — more partitions, more consumer instances.
+
+**Step 4 — Prevent future backlogs:**
+
+- Set up **consumer lag alerts** (alert when lag > threshold for > 5 minutes).
+- Use **rate limiting on producers** for known bursty sources (like market data feeds).
+- Keep consumer processing time as short as possible — do the minimal work in the consumer, push heavy work to async threads.
+
+**中文解释：**
+
+消息积压是生产事故，需要快速诊断和响应。
+
+**第一步 — 诊断原因：**
+
+- 是生产者突增（开盘、批处理任务）？还是消费者变慢（下游DB慢、新版本代码Bug）？
+- 用监控看消费者Lag趋势：是突然升高还是持续增长？
+- Kafka：`kafka-consumer-groups.sh --describe` 查看各partition的LAG值。
+
+**第二步 — 紧急扩容消费者：**
+
+- 增加消费者实例数（Kafka中消费者数不能超过partition数，超出的实例会空闲）。
+- 临时增大单实例的消费并发线程数（注意幂等性要能支撑并发）。
+- 如果partition数成为上限：增加partition数（不可逆操作，需谨慎规划）。
+
+**第三步 — 修复根因：**
+
+- 消费者慢 → 查下游DB（加只读副本、加Redis缓存）、查GC（内存泄漏）、查网络。
+- 代码Bug导致消费者崩溃重启 → 修Bug回滚或热修复。
+- 生产者流量永久性增长 → 扩容partition + 消费者实例。
+
+**第四步 — 预防：**
+
+- 监控Lag，设置告警（Lag > N 且持续 > 5分钟触发告警）。
+- 对已知突发流量场景（开盘、活动）提前扩容。
+- 消费者逻辑尽量轻量，重处理移到异步线程池，不阻塞消费loop。
+
+**面试答法**：分四步——诊断 → 紧急扩容消费者 → 修复根因 → 预防监控。不要只说"加消费者"，面试官想看到你有完整的incident处理思路。
+
+---
+
+### Q10-5. What is a Dead Letter Queue (DLQ)? How do you design a DLQ strategy?
+
+### 问题10-5：什么是死信队列（DLQ）？如何设计死信队列策略？
+
+**English Answer:**
+
+A **Dead Letter Queue (DLQ)** is a special queue where messages go when they **cannot be processed successfully** after a maximum number of retries. Instead of blocking the main queue or dropping the message, the system routes the "poison pill" message to the DLQ for investigation.
+
+**Why DLQ matters:**
+
+Without a DLQ, a bad message (malformed payload, unexpected data) will keep failing, block the consumer, and stop all subsequent messages from being processed — this is called a "poison pill" problem.
+
+**DLQ design — three decisions:**
+
+**1. Retry policy before DLQ:**
+
+```yaml
+# Spring Kafka retry configuration
+spring.kafka.listener.retry.max-attempts: 3
+spring.kafka.listener.retry.backoff.initial-interval: 1000ms
+spring.kafka.listener.retry.backoff.multiplier: 2.0
+# Sequence: attempt 1 → wait 1s → attempt 2 → wait 2s → attempt 3 → DLQ
+```
+
+**2. DLQ naming convention:**
+Use a consistent pattern so DLQ messages are easy to find:
+
+- Kafka: `order-events.DLQ` or `order-events-dlq`
+- IBM-MQ: `DEAD.LETTER.QUEUE` (system-level) or `APP.ORDER.DLQ` (application-level)
+
+**3. DLQ message enrichment:**
+Add context to the DLQ message so engineers can debug it:
+
+```java
+public record DlqMessage(
+    String originalTopic,
+    String originalPayload,
+    String errorMessage,
+    String stackTrace,
+    int retryCount,
+    Instant failedAt
+) {}
+```
+
+**DLQ operations:**
+
+- **Monitoring**: Alert when DLQ message count > 0 (every DLQ message is a bug or data issue).
+- **Replay**: After fixing the root cause, replay DLQ messages back to the original topic.
+- **Manual inspection**: Build a simple admin tool to view DLQ messages without special access to the broker.
+
+```java
+// Example: replay DLQ messages back to original topic
+@Scheduled(cron = "0 0 3 * * *")  // 3am nightly
+public void replayDlqMessages() {
+    List<DlqMessage> failed = dlqRepository.findAll();
+    failed.forEach(msg -> {
+        kafkaTemplate.send(msg.originalTopic(), msg.originalPayload());
+        dlqRepository.delete(msg);
+    });
+}
+```
+
+**中文解释：**
+
+**死信队列（DLQ）**：消息经过N次重试仍然处理失败后，被路由到一个特殊的队列（DLQ），而不是丢弃或无限重试阻塞主队列。
+
+**为什么需要DLQ：**
+没有DLQ的情况下，一条"毒消息"（格式错误、依赖数据不存在）会让消费者陷入无限重试循环，后续正常消息全部被阻塞——这就是"毒丸问题"（poison pill）。
+
+**DLQ设计的三个决策：**
+
+**1. 重试策略**：定义重试次数和退避间隔。典型配置：最多3次，间隔1s/2s/4s（指数退避），3次失败后进DLQ。
+
+**2. DLQ命名规范**：`原topic名.DLQ` 或 `原topic名-dlq`，一目了然。每个业务topic对应一个DLQ，不要共用。
+
+**3. DLQ消息信息增强**：进入DLQ时附加错误信息（原始Payload、异常堆栈、重试次数、失败时间），方便排查。否则只有原始消息，不知道为什么失败。
+
+**DLQ运营三件事：**
+
+- **监控告警**：DLQ有消息 = 必须告警，每一条DLQ消息都是Bug或数据问题。
+- **重放（Replay）**：修复根因后，将DLQ消息重新投递回原topic重新消费。
+- **可视化**：提供简单的管理界面查看DLQ消息内容，不需要运维人员直接登录Broker。
+
+**面试答法**：DLQ是消息可靠性的"最后防线"，设计时关注三点：重试策略、消息元数据增强、重放机制。监控上DLQ消息数必须是关键告警指标。
+
+---
+
+### Q10-6. Technology Selection: IBM-MQ vs Kafka vs RocketMQ — When to use which?
+
+### 问题10-6：技术选型 — IBM-MQ、Kafka、RocketMQ 怎么选？
+
+**English Answer:**
+
+There is no single "best" MQ. The right choice depends on your requirements. Here is a structured comparison.
+
+**Core characteristics:**
+
+| Dimension                  | IBM-MQ                         | Apache Kafka                                  | Apache RocketMQ                       |
+| -------------------------- | ------------------------------ | --------------------------------------------- | ------------------------------------- |
+| **Primary model**          | Point-to-point queue           | Event streaming / pub-sub log                 | Hybrid (queue + streaming)            |
+| **Message retention**      | Consumed then deleted          | Retained for days/weeks (replay)              | Retained, configurable                |
+| **Ordering**               | FIFO per queue, message groups | Per-partition ordered                         | Ordered queues, global order option   |
+| **Throughput**             | Medium (thousands/sec)         | Very high (millions/sec per broker)           | High (hundreds of thousands/sec)      |
+| **Exactly-once**           | Yes (XA transactions)          | Kafka transactions (complex)                  | Transactional messages                |
+| **Ecosystem**              | JMS, MQ .NET, mainframe        | Kafka Streams, Kafka Connect, Schema Registry | Spring integration, Alibaba ecosystem |
+| **License & support**      | IBM commercial license, $$$    | Apache open source / Confluent paid           | Apache open source / Alibaba Cloud    |
+| **Operational complexity** | Low (IBM managed)              | High (ZooKeeper/KRaft, tuning)                | Medium                                |
+
+**Decision guide — use IBM-MQ when:**
+
+- Your organization already has IBM-MQ infrastructure and IBM enterprise support contracts.
+- You need to integrate with **mainframe systems** or legacy COBOL applications (IBM-MQ is the standard in banking for this).
+- You need **XA transactions** — guaranteed exactly-once across MQ + database in a two-phase commit.
+- Compliance requires enterprise-grade SLA and certified disaster recovery.
+
+**Decision guide — use Kafka when:**
+
+- You need **very high throughput** (hundreds of thousands to millions of messages per second).
+- Multiple downstream services need to **independently consume the same event** (e.g., risk engine, audit, analytics all read the same trade event).
+- You need **event replay** — replay all events from the last 7 days to rebuild a new service's state.
+- You are building a **real-time data pipeline** — CDC, streaming analytics, ETL.
+- Your team is cloud-native and familiar with Kafka's operational model.
+
+**Decision guide — use RocketMQ when:**
+
+- Your team is in the **Alibaba/Chinese tech ecosystem** and needs Alibaba Cloud integration.
+- You need a **transactional message** pattern (half-message + local transaction + confirm) that is simpler than Kafka transactions.
+- You need **delay messages** natively (send a message to be delivered in 30 seconds — Kafka needs custom implementation, RocketMQ has it built-in).
+- You need a balance between Kafka's high throughput and IBM-MQ's reliability, with simpler operations.
+
+**RocketMQ's unique killer feature — Transactional Messages:**
+
+```
+1. Producer sends a "half message" (invisible to consumers)
+2. Producer executes local database transaction
+3. If DB commit succeeds → producer sends COMMIT to broker → message becomes visible
+4. If DB commit fails → producer sends ROLLBACK → message discarded
+5. If producer crashes → broker queries producer to confirm (transaction check)
+```
+
+This solves the distributed transaction problem without XA — simpler and more performant than two-phase commit.
+
+**Summary for interviews:**
+
+- **IBM-MQ**: Legacy banking, mainframe integration, XA transactions, enterprise compliance.
+- **Kafka**: High throughput, event streaming, multi-subscriber fan-out, event sourcing, data pipelines.
+- **RocketMQ**: Transactional messages, delay queues, Alibaba ecosystem, simpler ops than Kafka.
+
+In practice, most large financial systems use **IBM-MQ for critical transactional commands** and **Kafka for event broadcasting and analytics** — they coexist.
+
+**中文解释：**
+
+**三者核心定位：**
+
+| 维度    | IBM-MQ     | Kafka                  | RocketMQ    |
+| ----- | ---------- | ---------------------- | ----------- |
+| 核心模型  | 点对点队列      | 事件流/持久化日志              | 队列 + 流，混合模型 |
+| 消息保留  | 消费后删除      | 按时间保留（可回放）             | 可配置保留时间     |
+| 吞吐量   | 中等（千级/秒）   | 极高（百万级/秒）              | 高（十万级/秒）    |
+| 精确一次  | XA事务（强支持）  | Kafka事务（复杂）            | 事务消息（简洁）    |
+| 延迟消息  | 不支持        | 不原生支持（需自实现）            | **原生支持**    |
+| 运维复杂度 | 低（IBM托管）   | 高（需要ZooKeeper/KRaft调优） | 中           |
+| 许可/费用 | IBM商业授权（贵） | 开源/Confluent商业版        | 开源/阿里云版     |
+
+**选型决策树：**
+
+**选 IBM-MQ 的场景：**
+
+- 公司已有IBM-MQ基础设施和IBM企业支持合同（迁移成本高，维持现状合理）。
+- 需要与**大型机（Mainframe）** 或 COBOL系统集成（IBM-MQ是银行核心系统的标准协议）。
+- 需要**XA事务**（MQ + 数据库的两阶段提交，保证精确一次）。
+- 监管合规要求企业级SLA和经认证的灾备方案。
+
+**选 Kafka 的场景：**
+
+- 需要**超高吞吐量**（十万至百万级TPS）。
+- **多个下游服务**需要独立消费同一事件（风控、审计、分析分别订阅交易事件）。
+- 需要**事件回放**（新服务上线，需要消费历史7天数据重建状态）。
+- 构建**实时数据管道**（CDC数据同步、流式计算、ETL）。
+
+**选 RocketMQ 的场景：**
+
+- 团队在**阿里/国内互联网生态**中，需要与阿里云深度集成。
+- 需要**延迟消息**原生支持（30秒后投递，无需自己实现）。
+- 需要**事务消息**（半消息机制，比Kafka事务简单得多）。
+- 介于Kafka吞吐量和IBM-MQ可靠性之间，且运维能力相对有限。
+
+**RocketMQ事务消息原理（面试加分项）：**
+
+```
+1. 生产者发送"半消息"（消费者不可见）
+2. 生产者执行本地数据库事务
+3. DB提交成功 → 发送COMMIT → 消息对消费者可见
+4. DB提交失败 → 发送ROLLBACK → 消息丢弃
+5. 生产者崩溃 → Broker回查生产者确认事务状态
+```
+
+这个模式解决了分布式事务问题，不需要XA，比两阶段提交简单且性能更好。
+
+**面试标准答法**：三者不互斥，大型金融系统常见的是**IBM-MQ处理核心交易命令**（下单、转账）+ **Kafka做事件广播和数据管道**共存。RocketMQ在阿里生态或需要延迟消息时是Kafka的好替代。
+
+---
+
 ## Quick Reference — New JD Key Technology Choices
 
 ## 新 JD 核心技术选型速查
 
-| Technology         | Key Point for Interview                                       |
-| ------------------ | ------------------------------------------------------------- |
-| Spring Boot 3      | Jakarta EE, Java 17+, Micrometer Tracing                      |
-| Spring Cloud       | OpenFeign, Resilience4j, Config Server, Eureka                |
-| Spring Batch       | Chunk processing, restartable, for large data jobs            |
-| Hibernate L1/L2    | L1=session-scoped, L2=application-scoped, old data risk       |
+| Technology         | Key Point for Interview                                        |
+| ------------------ | -------------------------------------------------------------- |
+| Spring Boot 3      | Jakarta EE, Java 17+, Micrometer Tracing                       |
+| Spring Cloud       | OpenFeign, Resilience4j, Config Server, Eureka                 |
+| Spring Batch       | Chunk processing, restartable, for large data jobs             |
+| Hibernate L1/L2    | L1=session-scoped, L2=application-scoped, old data risk        |
 | React.js           | useState (state), useEffect (extra actions), React.memo (perf) |
-| Context API        | Cross-component state without prop drilling                   |
-| Docker multi-stage | Build stage (Maven+JDK) → Runtime stage (JRE only)            |
-| JUnit 5            | assertThrows, assertDoesNotThrow, assertAll                   |
-| @Mock vs @MockBean | @Mock=unit test (no Spring), @MockBean=integration test       |
-| Scrum vs Kanban    | Scrum=fixed sprints (dev), Kanban=continuous flow (ops)       |
+| Context API        | Cross-component state without prop drilling                    |
+| Docker multi-stage | Build stage (Maven+JDK) → Runtime stage (JRE only)             |
+| JUnit 5            | assertThrows, assertDoesNotThrow, assertAll                    |
+| @Mock vs @MockBean | @Mock=unit test (no Spring), @MockBean=integration test        |
+| Scrum vs Kanban    | Scrum=fixed sprints (dev), Kanban=continuous flow (ops)        |
