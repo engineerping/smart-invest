@@ -612,9 +612,284 @@ We run this drill every quarter to make sure it works.
 
 ---
 
-### Q16. Why do you put NAT Gateways in public subnets, but EKS and Aurora in private subnets?
+### Q16. How does Amazon Aurora's internal architecture work across multiple AZs? How is it different from traditional databases?
 
-### 问题16：为什么 NAT Gateway 放在公有子网，而 EKS 和 Aurora 放在私有子网？
+### 问题16：Amazon Aurora 在多可用区架构中内部是如何工作的？和传统数据库有何不同？
+
+**English Answer:**
+
+This is one of the most commonly misunderstood parts of Aurora. The key difference is that Aurora **separates storage from compute**, while traditional databases keep them together.
+
+**Traditional Multi-AZ (e.g., RDS MySQL):**
+
+- Each AZ has a completely independent, full copy of the database.
+- Replication happens by shipping transaction logs from the primary to the standby.
+- If the primary fails, the standby takes over — but you may lose a few seconds of data (RPO > 0).
+
+**Amazon Aurora Multi-AZ:**
+
+*Storage layer (shared across all AZs):*
+
+- Aurora has a single distributed **Cluster Volume** that spans all 3 AZs.
+- Every write is automatically stored in **6 copies across 3 AZs** (2 copies per AZ).
+- A write is confirmed as soon as **4 of the 6** copies acknowledge it (quorum write). This means the system survives losing an entire AZ without losing any committed data.
+
+*Compute layer (separate roles):*
+
+- **AZ-a — Primary Instance (Writer):** handles all write operations and can serve reads.
+- **AZ-b and AZ-c — Aurora Replicas (Readers):** handle read traffic, lag behind the writer by only a few milliseconds.
+- If the writer crashes, Aurora promotes a reader to writer in **~30 seconds** — no data synchronisation needed because all nodes already share the same storage.
+
+This design gives Aurora two key advantages over traditional Multi-AZ: **faster failover** (30 seconds vs several minutes) and **built-in read scaling** without manual replication setup.
+
+**中文解释：**
+
+Aurora 与传统数据库的核心区别在于"存储与计算分离"：
+
+**传统 Multi-AZ（如 RDS MySQL）：**
+
+- 每个AZ各有一份完整、独立的数据库，通过复制事务日志进行同步
+- 主库宕机时，备库接管，但可能丢失几秒数据（RPO > 0）
+
+**Amazon Aurora Multi-AZ：**
+
+*存储层（跨AZ共享）：*
+
+- Aurora 底层是一个跨3个AZ的共享集群卷（Cluster Volume）
+- 每次写入自动在3个AZ存储6份（每个AZ 2份），只需4/6副本确认即算成功（Quorum写入）
+- 即使整个AZ宕机，已提交的数据不会丢失（RPO = 0 for AZ failure）
+
+*计算层（角色分工）：*
+
+- **AZ-a：Primary Instance（写节点）** — 处理所有写操作
+- **AZ-b/AZ-c：Aurora Replica（读副本）** — 分担读流量，延迟仅几毫秒
+- 主节点故障后，约30秒内自动提升读副本为新主节点，无需等待数据同步（存储本来就是共享的）
+
+面试关键一句话：**"Aurora 的存储层是跨AZ的分布式共享卷，计算层才有 Writer 和 Reader 的区分，这与传统数据库每个AZ维护一份完整独立拷贝的模式根本不同。"**
+
+---
+
+### Q17. What is the difference between hot standby, warm standby, and cold standby? Which does your Hong Kong DR site use and why?
+
+### 问题17：热备、温备、冷备有什么区别？你们香港灾备中心用的是哪种模式，为什么？
+
+**English Answer:**
+
+These terms describe how ready your backup site is to take over when a disaster happens:
+
+| Mode                            | Description                                                                                                                                      | Recovery Time | Cost               |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ------------- | ------------------ |
+| **Cold Standby**                | No resources running. Infrastructure is defined in Terraform/CDK but not deployed. Everything must be provisioned from scratch at disaster time. | Hours         | Lowest             |
+| **Warm Standby**                | Infrastructure exists (EKS cluster, load balancer, Aurora replica), but scaled down to a minimum. Scaled up at disaster time.                    | 10–30 minutes | Medium             |
+| **Hot Standby (Active-Active)** | Full production capacity running in both sites simultaneously. Live traffic already flows to both.                                               | Seconds       | Highest (~2× cost) |
+
+**Our Hong Kong DR site uses Warm Standby:**
+
+- The EKS cluster already exists in Hong Kong but runs only 2–3 nodes (production Singapore runs 30+).
+- Aurora Global Database continuously replicates data from Singapore to Hong Kong with < 1 second lag — so the data is always current.
+- When disaster strikes, Karpenter provisions new EKS nodes in ~2 minutes, we promote Aurora to primary in ~1 minute, and ArgoCD deploys all services in ~5 minutes.
+- **Total: ~15 minutes → meets our RTO target.**
+
+We chose Warm Standby over Hot Standby to control cost. Running full production capacity in two regions simultaneously would nearly double our infrastructure spend, which is hard to justify at our current scale.
+
+**中文解释：**
+
+三种灾备模式的核心区别是"平时烧多少钱，出事后多快能恢复"：
+
+| 模式                      | 平时状态                 | 恢复时间    | 成本        |
+| ----------------------- | -------------------- | ------- | --------- |
+| **冷备 (Cold Standby)**   | 什么都没运行，只有Terraform配置 | 数小时     | 最低        |
+| **温备 (Warm Standby)**   | 基础设施存在但缩容至最低         | 10–30分钟 | 中等        |
+| **热备/双活 (Hot Standby)** | 两边都跑满，同时承接真实流量       | 秒级      | 最高（约2倍成本） |
+
+**我们香港用温备（Warm Standby）：**
+
+- EKS集群已存在，但只保留2–3个节点（新加坡生产环境有30+节点）
+- Aurora Global Database 实时复制，香港数据延迟 < 1秒，时刻保持最新
+- 灾难触发后：Karpenter 约2分钟扩容EKS节点，提升 Aurora 主库约1分钟，ArgoCD 部署微服务约5分钟
+- **合计约15分钟，满足 RTO < 15分钟目标**
+
+选择温备而非热备的原因：热备需要香港维持与新加坡同等规模的基础设施，成本接近翻倍。在我们当前的业务规模下，这笔额外支出不经济。
+
+---
+
+### Q18. During the 15-minute failover to Hong Kong, what happens to in-flight requests that were being processed in Singapore?
+
+### 问题18：在15分钟的切换窗口内，正在新加坡处理中的请求（in-flight requests）会怎么样？
+
+**English Answer:**
+
+This is a realistic question about what users actually experience during a regional failover. The honest answer is: **some requests will fail**, and the system must be designed to handle this gracefully.
+
+Here is what happens during the ~15-minute window:
+
+1. **Active connections to Singapore are dropped.** Any request being processed in Singapore will time out or return an error. Users will see an error page or experience a service interruption.
+
+2. **The application handles this through three mechanisms:**
+   
+   - **Retry logic for idempotent operations** — fetching a portfolio balance or market price can be retried safely without causing side effects. Clients retry automatically after a short backoff.
+   - **Non-idempotent writes need extra care** — if a buy order was half-processed when Singapore went down, we must verify on recovery whether it was committed or not. We use Kafka's exactly-once semantics and database transaction boundaries to ensure a trade is never double-executed.
+   - **Circuit Breaker (Resilience4j)** — detects repeated failures to the Singapore endpoint and stops sending new requests there, preventing cascading failures across services.
+
+3. **Route 53 health checks detect the outage** — Route 53 polls the Singapore ALB every 10 seconds. When it detects failure, it automatically updates DNS to point new requests to the Hong Kong load balancer. Because our DNS TTL is 60 seconds, most clients see Hong Kong within 1–2 minutes of the switchover.
+
+4. **What users actually experience:** a service interruption of roughly 15 minutes. For a financial application, we communicate this through status page updates and push notifications.
+
+**The key design principle: every write operation must be idempotent** — safely re-executable without producing double charges, duplicate orders, or corrupted account balances.
+
+**中文解释：**
+
+这道题考察你是否理解灾难恢复的真实代价。诚实的回答是：**在15分钟切换窗口内，部分请求会失败**，系统必须在设计层面应对这一事实。
+
+**具体发生什么：**
+
+1. **新加坡的活跃连接被强制中断** — 正在处理的请求超时或报错，用户看到错误页面。
+
+2. **应用层通过三种机制应对：**
+   
+   - **幂等操作自动重试** — 查询持仓、查询余额等操作可以安全重试，不影响正确性
+   - **非幂等写操作需要特别保障** — 例如买入订单在新加坡处理了一半就断开了，切换到香港后需要确认该订单是否已提交。我们通过 Kafka Exactly-Once + 数据库事务来确保不会重复扣款
+   - **Circuit Breaker（Resilience4j 熔断器）** — 检测到新加坡端点连续失败后自动熔断，阻止新请求继续打到宕机的端点，防止服务雪崩
+
+3. **Route 53 健康检查自动触发** — Route 53 每10秒轮询新加坡ALB，检测到故障后自动将DNS切向香港ALB。因为我们设置了60秒TTL，1–2分钟内大部分客户端就能访问香港。
+
+4. **用户实际体验** — 约15分钟的服务中断窗口。我们通过状态页面和推送通知告知用户。
+
+**核心设计原则：所有写操作必须是幂等的（Idempotent）**，才能在灾难恢复后安全重试，不产生重复扣款、重复下单等金融事故。
+
+---
+
+### Q19. How does Aurora Global Database prevent split-brain during a cross-region failover?
+
+### 问题19：Aurora Global Database 在跨Region切换时，如何防止脑裂（Split-Brain）问题？
+
+**English Answer:**
+
+**Split-brain** means two database instances both believe they are the primary writer at the same time. In a financial system, this is catastrophic — you could end up with two conflicting records of the same trade.
+
+Aurora Global Database prevents split-brain through a **managed, exclusive promotion process**:
+
+1. **Only one region can write at any time.** The Aurora Global Database architecture enforces a single writer at the storage layer — not just at the application layer. All other clusters are strictly read-only replicas.
+
+2. **The promotion operation is atomic.** When you run `aws rds failover-global-cluster`, AWS performs these steps atomically:
+   
+   - Detaches the Hong Kong cluster from the global cluster, making it an independent primary (read-write).
+   - Simultaneously marks Singapore as "no longer primary" — it cannot accept writes even if it recovers.
+   - There is no intermediate state where both clusters are writable.
+
+3. **Singapore cannot write once detached.** Even if Singapore comes back online, it is now an isolated, detached cluster. It no longer belongs to the global cluster and cannot produce writes that affect Hong Kong's data.
+
+4. **Re-joining after recovery.** After the incident, Singapore re-joins the global cluster as a **read replica** (not as primary). You verify data consistency before promoting it back to primary.
+
+The critical insight: Aurora prevents split-brain **at the infrastructure level**, not through application-layer heartbeats or lock files. You simply cannot have two writers in the same Aurora Global Database cluster simultaneously.
+
+**中文解释：**
+
+**脑裂（Split-Brain）** = 两个数据库实例同时认为自己是主库，各自接受写入，导致同一笔交易产生两份不一致的记录。在金融系统中，后果是灾难性的。
+
+Aurora Global Database 通过**托管式排他提升（Managed Exclusive Promotion）**防止脑裂：
+
+1. **同一时刻只允许一个Region可写** — Aurora Global 在**存储层**强制执行，只有一个Primary Cluster拥有写权限，不是靠应用层逻辑控制的。
+
+2. **提升操作是原子的** — 执行 `failover-global-cluster` 时，AWS 原子性地完成：
+   
+   - 将香港集群从全球集群中"分离（Detach）"，提升为独立的读写主集群
+   - 同时将新加坡标记为"不再是Primary"，不能接受写操作
+   - 不存在两个集群同时可写的中间状态
+
+3. **新加坡即使恢复也无法写入** — 它已被从Global集群中移除，成为一个孤立集群，不会对香港的数据产生任何写入影响。
+
+4. **灾后重建** — 确认香港数据完整后，将新加坡以**只读副本**身份重新加入全球集群，而非直接提升为主库。
+
+关键点：Aurora Global Database 在**基础设施层**防止了脑裂，而非依赖应用层心跳或分布式锁等机制。一个全球集群中，同一时刻永远只能有一个可写节点。
+
+---
+
+### Q20. How do you test your disaster recovery plan? Walk me through a DR drill.
+
+### 问题20：如何测试灾备方案？走一遍 DR 演练（Disaster Recovery Drill）的完整流程。
+
+**English Answer:**
+
+A DR plan that has never been tested is just a theory. We run a **quarterly DR drill** to verify the entire failover process works end-to-end.
+
+**Phase 1 — Pre-drill preparation (1 week before)**
+
+- Notify all engineering teams and stakeholders. Schedule a maintenance window.
+- Review and update the runbook (step-by-step operational instructions).
+- Verify that Hong Kong EKS cluster and Aurora replica are healthy and in sync.
+- Confirm that all Terraform and Kubernetes configs in Git are up to date.
+
+**Phase 2 — Simulate the failure**
+
+- Block all traffic to the Singapore ALB using Route 53 (we do NOT destroy Singapore — we need to be able to roll back quickly).
+- Monitor CloudWatch alarms and PagerDuty alerts to confirm they fire as expected within the agreed SLA.
+
+**Phase 3 — Execute the failover (target: < 15 minutes)**
+
+1. Promote Hong Kong Aurora to primary — one AWS CLI command, ~1 minute.
+2. Update Route 53 health check policy to route to Hong Kong ALB — ~2–3 minutes.
+3. Karpenter scales up Hong Kong EKS nodes — ~2–3 minutes.
+4. ArgoCD pulls configs from Git and deploys all microservices — ~5–7 minutes.
+5. Run smoke tests: login, portfolio query, place a test order, check trade history.
+
+**Phase 4 — Measure and record**
+
+- Actual RTO achieved (target < 15 minutes).
+- Actual RPO: check the timestamp of the last committed Aurora transaction in Hong Kong vs Singapore.
+- Document every step that took longer than expected or required manual intervention.
+
+**Phase 5 — Fail back**
+
+- Re-add Singapore as a read replica of Hong Kong.
+- Gradually restore traffic to Singapore.
+- Write a post-drill report with lessons learned and action items.
+
+**What we learned from past drills:** in one drill, we discovered that Karpenter in Hong Kong was not pre-configured with the correct node pool, adding 5 extra minutes. We fixed this before the next drill. This is exactly the value of drilling — you cannot afford to discover configuration gaps during a real disaster.
+
+**中文解释：**
+
+没有测试过的灾备方案只是一张纸。我们**每季度**执行一次完整的灾备演练（DR Drill）。
+
+**第一阶段：提前准备（演练前一周）**
+
+- 通知所有工程团队和相关方，安排维护窗口
+- 审查并更新 Runbook（逐步操作手册）
+- 确认香港EKS集群和Aurora副本健康且数据同步正常
+- 确认Git中所有Terraform和Kubernetes配置均为最新
+
+**第二阶段：模拟故障**
+
+- 通过 Route 53 屏蔽新加坡ALB的流量（不真正摧毁新加坡环境，便于快速回切）
+- 监控 CloudWatch 告警和 PagerDuty，确认告警按预期在规定时间内触发
+
+**第三阶段：执行切换（目标：< 15分钟）**
+
+1. 提升香港 Aurora 为主库（一条 AWS CLI 命令，约1分钟）
+2. 更新 Route 53 将流量路由至香港 ALB（约2–3分钟）
+3. Karpenter 扩容香港 EKS 节点（约2–3分钟）
+4. ArgoCD 从 Git 拉取配置，部署所有微服务（约5–7分钟）
+5. 执行冒烟测试：登录、查询持仓、下测试订单、查看交易记录
+
+**第四阶段：测量与记录**
+
+- 记录实际达成的 RTO（目标 < 15分钟）
+- 记录实际 RPO：对比香港与新加坡 Aurora 最后一笔已提交事务的时间戳
+- 记录所有超时或需要手动干预的步骤
+
+**第五阶段：回切**
+
+- 将新加坡以只读副本身份重新加入全球集群
+- 逐步将流量切回新加坡
+- 编写演练报告，记录改进项和行动事项
+
+**真实经验：** 某次演练中我们发现香港的Karpenter节点池配置未同步，导致扩容多花了5分钟。在下次演练前完成了修复。演练的价值正在于此——**绝不能等到真正的灾难才发现配置漏洞**。
+
+---
+
+### Q21. Why do you put NAT Gateways in public subnets, but EKS and Aurora in private subnets?
+
+### 问题21：为什么 NAT Gateway 放在公有子网，而 EKS 和 Aurora 放在私有子网？
 
 **English Answer:**
 
@@ -643,9 +918,9 @@ We also use **VPC Endpoints** so that EKS pods can talk to AWS services (like Se
 
 ---
 
-### Q17. Why did you choose EKS instead of ECS Fargate?
+### Q22. Why did you choose EKS instead of ECS Fargate?
 
-### 问题17：为什么选择 EKS 而不是 ECS Fargate？
+### 问题22：为什么选择 EKS 而不是 ECS Fargate？
 
 **English Answer:**
 
@@ -669,9 +944,9 @@ The trade-off is that EKS is more complex to manage. But for a financial-grade s
 
 ---
 
-### Q18. What is IRSA and why is it better than putting AWS keys in the code?
+### Q23. What is IRSA and why is it better than putting AWS keys in the code?
 
-### 问题18：什么是 IRSA？为什么比把 AWS 密钥放在代码里更好？
+### 问题23：什么是 IRSA？为什么比把 AWS 密钥放在代码里更好？
 
 **English Answer:**
 
@@ -700,9 +975,9 @@ IRSA（IAM Roles for Service Accounts）解决了"如何让Pod安全访问AWS资
 
 ---
 
-### Q19. How does the system handle a sudden traffic spike, like 10x more users?
+### Q24. How does the system handle a sudden traffic spike, like 10x more users?
 
-### 问题19：如果流量突然增加10倍，系统如何应对？
+### 问题24：如果流量突然增加10倍，系统如何应对？
 
 **English Answer:**
 
@@ -734,9 +1009,9 @@ When traffic drops, we wait 5 minutes (stabilizationWindowSeconds: 300) before r
 
 ---
 
-### Q20. How does the system protect against DDoS attacks?
+### Q25. How does the system protect against DDoS attacks?
 
-### 问题20：系统如何防御 DDoS 攻击？
+### 问题25：系统如何防御 DDoS 攻击？
 
 **English Answer:**
 
@@ -766,9 +1041,9 @@ CloudFront is a global CDN. It handles attacks at the edge, before traffic even 
 
 ---
 
-### Q21. How does the system store and protect passwords and secrets?
+### Q26. How does the system store and protect passwords and secrets?
 
-### 问题21：系统如何存储和保护密码、密钥等敏感信息？
+### 问题26：系统如何存储和保护密码、密钥等敏感信息？
 
 **English Answer:**
 
@@ -799,9 +1074,9 @@ Here's how it works:
 
 ---
 
-### Q22. Someone on your team accidentally pushes a bad Docker image to production. How does the system catch this?
+### Q27. Someone on your team accidentally pushes a bad Docker image to production. How does the system catch this?
 
-### 问题22：如果团队成员不小心把有问题的 Docker 镜像推送到了生产环境，系统如何防御？
+### 问题27：如果团队成员不小心把有问题的 Docker 镜像推送到了生产环境，系统如何防御？
 
 **English Answer:**
 
@@ -837,9 +1112,9 @@ We have **multiple checkpoints** before any image reaches production:
 
 ---
 
-### Q23. Why did you choose Aurora PostgreSQL instead of regular RDS PostgreSQL?
+### Q28. Why did you choose Aurora PostgreSQL instead of regular RDS PostgreSQL?
 
-### 问题23：为什么选择 Aurora PostgreSQL 而不是普通的 RDS PostgreSQL？
+### 问题28：为什么选择 Aurora PostgreSQL 而不是普通的 RDS PostgreSQL？
 
 **English Answer:**
 
@@ -863,9 +1138,9 @@ Aurora vs RDS三个关键差异：
 
 ---
 
-### Q24. What problem does RDS Proxy solve?
+### Q29. What problem does RDS Proxy solve?
 
-### 问题24：RDS Proxy 解决了什么问题？
+### 问题29：RDS Proxy 解决了什么问题？
 
 **English Answer:**
 
@@ -893,9 +1168,9 @@ RDS Proxy解决3个问题：
 
 ---
 
-### Q25. Can you walk me through what happens when a developer merges code to main?
+### Q30. Can you walk me through what happens when a developer merges code to main?
 
-### 问题25：当开发者把代码合并到 main 分支时，发生了什么？请走一遍流程。
+### 问题30：当开发者把代码合并到 main 分支时，发生了什么？请走一遍流程。
 
 **English Answer:**
 
@@ -938,9 +1213,9 @@ GitOps核心理念：**Git是唯一的事实来源**。
 
 ---
 
-### Q26. What is a "canary deployment"? Why do you use it instead of releasing to all users at once?
+### Q31. What is a "canary deployment"? Why do you use it instead of releasing to all users at once?
 
-### 问题26：什么是"金丝雀发布"？为什么不直接发布给所有用户？
+### 问题31：什么是"金丝雀发布"？为什么不直接发布给所有用户？
 
 **English Answer:**
 
@@ -973,9 +1248,9 @@ ArgoCD Rollouts自动执行：10% → 观察5分钟 → 错误率 < 1% → 继�
 
 ---
 
-### Q27. If a user says "the system is slow," how do you find out what's wrong?
+### Q32. If a user says "the system is slow," how do you find out what's wrong?
 
-### 问题27：如果用户说"系统很慢"，你如何找到问题所在？
+### 问题32：如果用户说"系统很慢"，你如何找到问题所在？
 
 **English Answer:**
 
@@ -1048,9 +1323,9 @@ X-Ray shows the full journey of one request: `user-service → database → Redi
 
 ---
 
-### Q28. What is the QPS of your system? How did you design for it?
+### Q33. What is the QPS of your system? How did you design for it?
 
-### 问题28：你们系统的 QPS 是多少？是怎么设计和支撑的？
+### 问题33：你们系统的 QPS 是多少？是怎么设计和支撑的？
 
 **English Answer:**
 
@@ -1117,9 +1392,9 @@ HPA automatically scales each service from 2 pods to 20 pods. Karpenter adds new
 
 ---
 
-### Q29. What is the P99 latency requirement? How do you measure it?
+### Q34. What is the P99 latency requirement? How do you measure it?
 
-### 问题29：P99 延迟要求是多少？你怎么测量的？
+### 问题34：P99 延迟要求是多少？你怎么测量的？
 
 **English Answer:**
 
@@ -1151,9 +1426,9 @@ Alert: if P99 > 1 second on any endpoint, PagerDuty pages the on-call engineer.
 
 ---
 
-### Q30. How much data does your system store? How fast does it grow?
+### Q35. How much data does your system store? How fast does it grow?
 
-### 问题30：你们系统存了多少数据？增长速度是多少？
+### 问题35：你们系统存了多少数据？增长速度是多少？
 
 **English Answer:**
 
@@ -1179,9 +1454,9 @@ Aurora 总数据量约 **20GB**，每月增长约 800MB，对 Aurora 微不足�
 
 ---
 
-### Q31. Have you done load testing? How did you do it?
+### Q36. Have you done load testing? How did you do it?
 
-### 问题31：你们做过压力测试吗？怎么做的？
+### 问题36：你们做过压力测试吗？怎么做的？
 
 **English Answer:**
 
@@ -1215,9 +1490,9 @@ Yes. We run load tests before every major release using **JMeter**. Four test le
 
 ---
 
-### Q32. How do you handle a sudden 10x traffic spike — like a big marketing campaign?
+### Q37. How do you handle a sudden 10x traffic spike — like a big marketing campaign?
 
-### 问题32：如果突然来了10倍流量（比如一个大型营销活动），你们怎么应对？
+### 问题37：如果突然来了10倍流量（比如一个大型营销活动），你们怎么应对？
 
 **English Answer:**
 
@@ -1251,9 +1526,9 @@ Two strategies: **reactive** (automatic) and **proactive** (planned ahead).
 
 ---
 
-### Q33. What is your database connection pool size? How did you decide on the number?
+### Q38. What is your database connection pool size? How did you decide on the number?
 
-### 问题33：你们的数据库连接池大小是多少？怎么定的？
+### 问题38：你们的数据库连接池大小是多少？怎么定的？
 
 **English Answer:**
 
@@ -1331,9 +1606,9 @@ spring:
 
 ---
 
-### Q34. What is the difference between Spring Boot and Spring Cloud? When do you need Spring Cloud?
+### Q39. What is the difference between Spring Boot and Spring Cloud? When do you need Spring Cloud?
 
-### 问题34：Spring Boot 和 Spring Cloud 的区别是什么？什么时候需要 Spring Cloud？
+### 问题39：Spring Boot 和 Spring Cloud 的区别是什么？什么时候需要 Spring Cloud？
 
 **English Answer:**
 
@@ -1361,9 +1636,9 @@ spring:
 
 ---
 
-### Q35. What is Spring Batch? When would you use it instead of a normal Spring Boot service?
+### Q40. What is Spring Batch? When would you use it instead of a normal Spring Boot service?
 
-### 问题35：什么是 Spring Batch？什么时候用它而不是普通的 Spring Boot 服务？
+### 问题40：什么是 Spring Batch？什么时候用它而不是普通的 Spring Boot 服务？
 
 **English Answer:**
 
@@ -1407,9 +1682,9 @@ Spring Batch 用于处理**大批量离线数据**，典型场景：每日凌晨
 
 ---
 
-### Q36. Explain Hibernate caching — first-level vs second-level cache. How do you avoid stale data?
+### Q41. Explain Hibernate caching — first-level vs second-level cache. How do you avoid stale data?
 
-### 问题36：解释 Hibernate 的一级缓存和二级缓存。如何避免脏数据？
+### 问题41：解释 Hibernate 的一级缓存和二级缓存。如何避免脏数据？
 
 **English Answer:**
 
@@ -1460,9 +1735,9 @@ If User A changes their email, and User B reads the same User entity from L2 cac
 
 ---
 
-### Q37. What is the difference between `@Transactional` and `@Transactional(readOnly = true)`? When does each matter?
+### Q42. What is the difference between `@Transactional` and `@Transactional(readOnly = true)`? When does each matter?
 
-### 问题37：`@Transactional` 和 `@Transactional(readOnly = true)` 的区别是什么？各在什么场景下使用？
+### 问题42：`@Transactional` 和 `@Transactional(readOnly = true)` 的区别是什么？各在什么场景下使用？
 
 **English Answer:**
 
@@ -1510,9 +1785,9 @@ public Order placeOrder(OrderRequest request) {
 
 ---
 
-### Q38. What is a design pattern you have used to make code more reusable? Give a concrete example.
+### Q43. What is a design pattern you have used to make code more reusable? Give a concrete example.
 
-### 问题38：你用过哪种设计模式来提高代码复用率？请举例说明。
+### 问题43：你用过哪种设计模式来提高代码复用率？请举例说明。
 
 **English Answer:**
 
@@ -1588,9 +1863,9 @@ Now adding a new fee type only requires adding a new class, not modifying existi
 
 ---
 
-### Q39. How do you handle database transactions that span multiple services (distributed transactions)?
+### Q44. How do you handle database transactions that span multiple services (distributed transactions)?
 
-### 问题39：如何处理跨多个服务的数据库事务（分布式事务）？
+### 问题44：如何处理跨多个服务的数据库事务（分布式事务）？
 
 **English Answer:**
 
@@ -1634,9 +1909,9 @@ Problem: If the coordinator crashes after "prepare" but before "commit," service
 
 ---
 
-### Q40. How do you connect a React frontend to a Spring Boot backend? Walk me through the flow.
+### Q45. How do you connect a React frontend to a Spring Boot backend? Walk me through the flow.
 
-### 问题40：React 前端如何连接 Spring Boot 后端？请描述整个调用链路。
+### 问题45：React 前端如何连接 Spring Boot 后端？请描述整个调用链路。
 
 **English Answer:**
 
@@ -1739,9 +2014,9 @@ React调用Spring Boot后端的完整链路：
 
 ---
 
-### Q41. What is the difference between `useState` and `useEffect` in React? Give an example.
+### Q46. What is the difference between `useState` and `useEffect` in React? Give an example.
 
-### 问题41：React 中 `useState` 和 `useEffect` 的区别是什么？请举例。
+### 问题46：React 中 `useState` 和 `useEffect` 的区别是什么？请举例。
 
 **English Answer:**
 
@@ -1802,9 +2077,9 @@ function FundList() {
 
 ---
 
-### Q42. What is React.memo and when would you use it?
+### Q47. What is React.memo and when would you use it?
 
-### 问题42：React.memo 是什么？什么时候应该使用它？
+### 问题47：React.memo 是什么？什么时候应该使用它？
 
 **English Answer:**
 
@@ -1850,9 +2125,9 @@ React.memo 是一个性能优化工具，可以缓存组件渲染结果。如果
 
 ---
 
-### Q43. How do you manage state in React when you have many components that need to share data?
+### Q48. How do you manage state in React when you have many components that need to share data?
 
-### 问题43：React 中多个组件需要共享状态时，你们怎么管理？
+### 问题48：React 中多个组件需要共享状态时，你们怎么管理？
 
 **English Answer:**
 
@@ -1925,9 +2200,9 @@ React状态共享三板斧：
 
 ---
 
-### Q44. How do you handle form validation in React and Spring Boot at the same time?
+### Q49. How do you handle form validation in React and Spring Boot at the same time?
 
-### 问题44：React 和 Spring Boot 的表单校验如何同时处理？
+### 问题49：React 和 Spring Boot 的表单校验如何同时处理？
 
 **English Answer:**
 
@@ -2009,9 +2284,9 @@ Spring Boot用`@Valid`注解+Bean Validation注解（`@NotNull`、`@DecimalMin`�
 
 ---
 
-### Q45. How do you Dockerize a Spring Boot application? Walk me through the Dockerfile.
+### Q50. How do you Dockerize a Spring Boot application? Walk me through the Dockerfile.
 
-### 问题45：如何将 Spring Boot 应用 Docker 化？请讲解 Dockerfile 的写法。
+### 问题50：如何将 Spring Boot 应用 Docker 化？请讲解 Dockerfile 的写法。
 
 **English Answer:**
 
@@ -2072,9 +2347,9 @@ Dockerfile核心要点：
 
 ---
 
-### Q46. What is the difference between Docker `COPY` and `ADD`? When would you use each?
+### Q51. What is the difference between Docker `COPY` and `ADD`? When would you use each?
 
-### 问题46：Dockerfile 中 `COPY` 和 `ADD` 的区别是什么？各在什么场景使用？
+### 问题51：Dockerfile 中 `COPY` 和 `ADD` 的区别是什么？各在什么场景使用？
 
 **English Answer:**
 
@@ -2113,9 +2388,9 @@ ADD https://example.com/file.zip /app/  # downloads and copies
 
 ---
 
-### Q47. You have a memory leak in a Java application running in Docker. How do you diagnose it?
+### Q52. You have a memory leak in a Java application running in Docker. How do you diagnose it?
 
-### 问题47：Java 应用在 Docker 中出现了内存泄漏，你如何排查？
+### 问题52：Java 应用在 Docker 中出现了内存泄漏，你如何排查？
 
 **English Answer:**
 
@@ -2184,9 +2459,9 @@ Java内存泄漏排查步骤：
 
 ---
 
-### Q48. How do you write a JUnit 5 test that verifies a method throws an exception correctly?
+### Q53. How do you write a JUnit 5 test that verifies a method throws an exception correctly?
 
-### 问题48：如何用 JUnit 5 写一个测试，验证方法正确抛出了异常？
+### 问题53：如何用 JUnit 5 写一个测试，验证方法正确抛出了异常？
 
 **English Answer:**
 
@@ -2264,9 +2539,9 @@ JUnit 5 用 `assertThrows` 捕获并验证异常：
 
 ---
 
-### Q49. What is the difference between mocking with `@Mock` and `@MockBean` in Spring Boot testing?
+### Q54. What is the difference between mocking with `@Mock` and `@MockBean` in Spring Boot testing?
 
-### 问题49：Spring Boot 测试中 `@Mock` 和 `@MockBean` 的区别是什么？
+### 问题54：Spring Boot 测试中 `@Mock` 和 `@MockBean` 的区别是什么？
 
 **English Answer:**
 
@@ -2335,9 +2610,9 @@ class OrderControllerIntegrationTest {
 
 ---
 
-### Q50. What is the difference between Scrum and Kanban? Which do you prefer and why?
+### Q55. What is the difference between Scrum and Kanban? Which do you prefer and why?
 
-### 问题50：Scrum 和 Kanban 的区别是什么？你更倾向于哪个？
+### 问题55：Scrum 和 Kanban 的区别是什么？你更倾向于哪个？
 
 **English Answer:**
 
@@ -2381,9 +2656,9 @@ We use **Kanban** for production support (bug fixes, hotfixes):
 
 ---
 
-### Q51. What does a typical Code Review look like in your team? What do you look for as a reviewer?
+### Q56. What does a typical Code Review look like in your team? What do you look for as a reviewer?
 
-### 问题51：你们团队的 Code Review 是怎么做的？作为 reviewer 你重点看什么？
+### 问题56：你们团队的 Code Review 是怎么做的？作为 reviewer 你重点看什么？
 
 **English Answer:**
 
