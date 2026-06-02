@@ -7,7 +7,9 @@
 
 ---
 
+## Part 1 — JD Core Skills（Java 21 · OCP · Kafka · DDD · TDD）
 
+---
 
 ### Q4. What is the difference between Kafka and IBM-MQ? When do you use each?
 
