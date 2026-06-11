@@ -53,7 +53,7 @@ Smart Invest is a **small-amounts investment platform** through which, Banks poo
 
 ## 1. Product Analysis & Scope
 
-For detailed content, see: [Product-Analysis-Scope.md](./doc-manually/I.Product-Analysis-Scope.md)
+For detailed content, see: [Product-Analysis-Scope.md](doc-design/I.Product-Analysis-Scope.md)
 
 ## 2. System Architecture
 
