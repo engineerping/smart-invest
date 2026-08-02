@@ -1,0 +1,9 @@
+variable "project_name" { type = string }
+variable "environment" { type = string }
+variable "vpc_id" { type = string }
+variable "subnet_ids" { type = list(string) }
+variable "allowed_security_group_ids" { type = list(string) }
+variable "instance_type" { type = string }
+variable "num_cache_nodes" { type = number }
+variable "kms_key_arn" { type = string }
+variable "common_tags" { type = map(string) }

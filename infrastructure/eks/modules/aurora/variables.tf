@@ -1,0 +1,13 @@
+variable "project_name" { type = string }
+variable "environment" { type = string }
+variable "vpc_id" { type = string }
+variable "subnet_ids" { type = list(string) }
+variable "allowed_security_group_ids" { type = list(string) }
+variable "instance_count" { type = number }
+variable "instance_class" { type = string }
+variable "database_name" { type = string }
+variable "master_username" { type = string }
+variable "kms_key_arn" { type = string }
+variable "backup_retention_days" { type = number }
+variable "enable_deletion_protection" { type = bool }
+variable "common_tags" { type = map(string) }
