@@ -1,0 +1,41 @@
+replicaCount: 1
+
+image:
+  repository: gongchengship/smart-invest-api-gateway
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 256Mi
+
+livenessProbe:
+  path: /actuator/health
+  port: 8080
+readinessProbe:
+  path: /actuator/health
+  port: 8080
+
+env:
+
+  USER_SERVICE_URL: "http://user-service:8081"
+  FUND_SERVICE_URL: "http://fund-service:8082"
+  ORDER_SERVICE_URL: "http://order-service:8083"
+  NOTIFICATION_SERVICE_URL: "http://notification-worker:8084"
+
+secretEnvRefs:
+  - SPRING_DATASOURCE_PASSWORD
+  - JWT_SECRET

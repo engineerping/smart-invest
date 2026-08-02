@@ -1,0 +1,35 @@
+# =============================================================================
+# umbrella chart —— 一键部署全家
+# =============================================================================
+# 工业界实践：每个服务一个独立 chart（可独立发布/回滚/扩缩容），
+# 再用一个"聚合 chart"（umbrella）通过 dependencies 把子 chart 串起来。
+# 这样一条命令 helm install smart-invest 就能部署整套系统，
+# 又能单独 helm upgrade user-service 做独立发布。
+# =============================================================================
+apiVersion: v2
+name: smart-invest
+description: Smart Invest 微服务全家桶聚合 chart
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+# dependencies 通过 file:// 相对路径引用本地子 chart，无需远程仓库
+dependencies:
+  - name: user-service
+    version: 0.1.0
+    repository: "file://../charts/user-service"
+  - name: fund-service
+    version: 0.1.0
+    repository: "file://../charts/fund-service"
+  - name: order-service
+    version: 0.1.0
+    repository: "file://../charts/order-service"
+  - name: notification-worker
+    version: 0.1.0
+    repository: "file://../charts/notification-worker"
+  - name: api-gateway
+    version: 0.1.0
+    repository: "file://../charts/api-gateway"
+  - name: frontend
+    version: 0.1.0
+    repository: "file://../charts/frontend"

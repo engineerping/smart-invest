@@ -1,0 +1,40 @@
+replicaCount: 1
+
+image:
+  repository: gongchengship/smart-invest-notification-worker
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8084
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 256Mi
+
+livenessProbe:
+  path: /actuator/health
+  port: 8084
+readinessProbe:
+  path: /actuator/health
+  port: 8084
+
+env:
+
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-host:5432/smartinvest"
+  SPRING_DATASOURCE_USERNAME: "smartadmin"
+  RABBITMQ_HOST: "rabbitmq"
+
+secretEnvRefs:
+  - SPRING_DATASOURCE_PASSWORD
+  - JWT_SECRET

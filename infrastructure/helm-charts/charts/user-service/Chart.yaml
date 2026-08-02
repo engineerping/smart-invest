@@ -1,0 +1,9 @@
+# =============================================================================
+# user-service Helm Chart 元数据
+# =============================================================================
+apiVersion: v2
+name: user-service
+description: Smart Invest 用户与认证微服务
+type: application
+version: 0.1.0            # chart 版本（改动 chart 就升版本）
+appVersion: "1.0.0"      # 应用版本（对应镜像 tag）

@@ -1,0 +1,20 @@
+# =============================================================================
+# Service —— 服务发现
+# =============================================================================
+# 类比：给一组 Pod 发一个"固定的门牌号"(ClusterIP) + 一个稳定的 DNS 名。
+# 其他服务通过 http://user-service:8081 访问，不关心具体哪个 Pod。
+# 这就是 K8S 内置的服务发现（对应架构图里 K8S CoreDNS 的职责）。
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "svc.fullname" . }}
+  labels:
+    {{- include "svc.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app.kubernetes.io/name: {{ include "svc.name" . }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP

@@ -1,0 +1,40 @@
+# =============================================================================
+# Ingress —— 外部流量入口
+# =============================================================================
+# 对应架构图里的 Kong Gateway + NLB 层。K3S 自带的 Traefik 就是 Ingress 控制器，
+# 它监听这个 Ingress 资源，把公网流量按路径路由到集群内服务。
+#
+# 路径规划：
+#   /        → frontend（React 静态页）
+#   /api/**  → api-gateway（再转发到各微服务）
+#
+# 内网穿透软件把服务器 80/443 映射到公网域名后，访问公网域名即到此 Ingress。
+# =============================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: smart-invest
+  annotations:
+    # Traefik 的入口类名（K3S 默认）
+    kubernetes.io/ingress.class: traefik
+    # 演示环境不强制 HTTPS（内网穿透可能无证书），生产应配 cert-manager
+spec:
+  rules:
+    - http:
+        paths:
+          # 前端静态资源
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
+          # API 统一入口
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port:
+                  number: 8080

@@ -1,0 +1,64 @@
+# =============================================================================
+# Deployment —— 无状态应用的主部署单元
+# =============================================================================
+# 类比：Deployment 是"管家"，保证有 N 个副本(Pod)在运行。
+#   - 某个 Pod 挂了 → 自动重建（自愈）
+#   - 改了镜像/配置 → 滚动更新（金丝雀式逐个替换）
+#   - 想扩容 → 改 replicaCount，K8S 自动多起 Pod
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "svc.fullname" . }}
+  labels:
+    {{- include "svc.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "svc.name" . }}
+  template:
+    metadata:
+      labels:
+        {{- include "svc.labels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          # 非敏感环境变量从 values.env 读取（部署时合并）
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            # 敏感环境变量从 K8S Secret 注入（值存在集群里，不写进代码）
+            {{- range .Values.secretEnvRefs }}
+            - name: {{ . }}
+              valueFrom:
+                secretKeyRef:
+                  name: smart-invest-secrets
+                  key: {{ . }}
+            {{- end }}
+          # 资源限制：requests 是"保证"，limits 是"上限"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          # 就绪探针：就绪前不接流量（滚动更新时保证新旧交替不中断）
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.path }}
+              port: {{ .Values.readinessProbe.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          # 存活探针：探测失败 → K8S 杀掉重启（自愈）
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.path }}
+              port: {{ .Values.livenessProbe.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10

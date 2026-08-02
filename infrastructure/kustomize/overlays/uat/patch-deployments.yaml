@@ -1,0 +1,18 @@
+# uat 环境：副本数 2，资源规格更高（演示扩容能力）
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: user-service
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: 1
+              memory: 768Mi

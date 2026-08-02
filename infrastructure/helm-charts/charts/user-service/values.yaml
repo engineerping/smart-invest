@@ -1,0 +1,53 @@
+# =============================================================================
+# user-service 默认配置值（values.yaml）
+# =============================================================================
+# Helm 的工作原理：values.yaml 提供默认值，模板(templates/*.yaml)读取这些值。
+# 部署时可用 --set 覆盖，或用 Kustomize overlay / umbrella chart 覆盖。
+# =============================================================================
+
+# 副本数：K8S 会保证有这么多 Pod 在运行（自愈/弹性）
+replicaCount: 1
+
+image:
+  repository: gongchengship/smart-invest-user-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# 镜像拉取凭据（私有仓库才需要；这里是 Docker Hub 公开仓库，可留空）
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+# 服务（K8S Service）配置
+service:
+  type: ClusterIP
+  port: 8081
+
+# 容器资源配置（K8S 靠这个做调度和限制，面试可讲 requests/limits）
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 768Mi
+
+# 存活探针/就绪探针：K8S 靠它判断 Pod 是否健康，故障自动重启
+livenessProbe:
+  path: /actuator/health
+  port: 8081
+readinessProbe:
+  path: /actuator/health
+  port: 8081
+
+# 环境变量（非敏感）：从 ConfigMap 注入
+env:
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-host:5432/smartinvest"
+  SPRING_DATASOURCE_USERNAME: "smartadmin"
+  RABBITMQ_HOST: "rabbitmq"
+
+# 敏感环境变量：从 K8S Secret 注入（values 里只写 key 名，不写值）
+secretEnvRefs:
+  - SPRING_DATASOURCE_PASSWORD
+  - JWT_SECRET

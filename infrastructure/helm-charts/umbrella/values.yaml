@@ -1,0 +1,48 @@
+# =============================================================================
+# umbrella 全局 values —— 统一覆盖子 chart 的默认值
+# =============================================================================
+# 部署时可用 -f 覆盖此文件，或 --set 覆盖单个值。
+# 这里的键对应子 chart 的名字（Helm 约定：chart 名 + 配置）。
+# =============================================================================
+
+# 全局镜像 tag：所有服务用同一个版本（部署时由 CI/CD 注入实际版本）
+global:
+  imageTag: latest
+
+# 敏感配置（部署时用真实值覆盖；这里是演示默认值，已是 base64 编码）
+secrets:
+  dbPassword: "bG9jYWxkZXYtb25seQ=="          # localdev_only
+  jwtSecret: "c21hcnRpbnZlc3QtZGVtby1zZWNyZXQta2V5LWNoYW5nZS1tZS1wbGVhc2UtMzJieXRlcw=="
+  rabbitmqPassword: "bG9jYWxkZXYtb25seQ=="    # localdev_only
+
+# 各子 chart 的配置（会与子 chart 自己的 values.yaml 合并，此处优先）
+user-service:
+  replicaCount: 1
+  image:
+    tag: latest
+  secretEnvRefs: [SPRING_DATASOURCE_PASSWORD, JWT_SECRET]
+
+fund-service:
+  replicaCount: 1
+  image:
+    tag: latest
+
+order-service:
+  replicaCount: 1
+  image:
+    tag: latest
+
+notification-worker:
+  replicaCount: 1
+  image:
+    tag: latest
+
+api-gateway:
+  replicaCount: 1
+  image:
+    tag: latest
+
+frontend:
+  replicaCount: 1
+  image:
+    tag: latest
