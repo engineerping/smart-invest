@@ -9,40 +9,47 @@
 global:
   imageTag: latest
 
-# 敏感配置（部署时用真实值覆盖；这里是演示默认值，已是 base64 编码）
+# 敏感配置（部署时用真实值覆盖；这里是演示默认明文，Secret 模板会自动 base64）
 secrets:
-  dbPassword: "bG9jYWxkZXYtb25seQ=="          # localdev_only
-  jwtSecret: "c21hcnRpbnZlc3QtZGVtby1zZWNyZXQta2V5LWNoYW5nZS1tZS1wbGVhc2UtMzJieXRlcw=="
-  rabbitmqPassword: "bG9jYWxkZXYtb25seQ=="    # localdev_only
+  dbPassword: "localdev_only"
+  jwtSecret: "smartinvest-demo-secret-key-change-me-please-32bytes"
+  rabbitmqPassword: "localdev_only"
 
 # 各子 chart 的配置（会与子 chart 自己的 values.yaml 合并，此处优先）
+# fullnameOverride 保证 Service 名固定为 user-service 等，
+# 便于其他服务/nginx 用稳定 DNS 名访问（如 http://order-service:8083）。
 user-service:
   replicaCount: 1
+  fullnameOverride: user-service
   image:
     tag: latest
-  secretEnvRefs: [SPRING_DATASOURCE_PASSWORD, JWT_SECRET]
 
 fund-service:
   replicaCount: 1
+  fullnameOverride: fund-service
   image:
     tag: latest
 
 order-service:
   replicaCount: 1
+  fullnameOverride: order-service
   image:
     tag: latest
 
 notification-worker:
   replicaCount: 1
+  fullnameOverride: notification-worker
   image:
     tag: latest
 
 api-gateway:
   replicaCount: 1
+  fullnameOverride: api-gateway
   image:
     tag: latest
 
 frontend:
   replicaCount: 1
+  fullnameOverride: frontend
   image:
     tag: latest

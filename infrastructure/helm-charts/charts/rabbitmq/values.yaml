@@ -1,0 +1,32 @@
+# =============================================================================
+# RabbitMQ 默认值 —— 用官方镜像（轻量，非 bitnami）
+# =============================================================================
+replicaCount: 1
+
+image:
+  repository: rabbitmq
+  tag: 3.13-management-alpine
+  pullPolicy: IfNotPresent
+
+# 服务：AMQP 5672 + 管理台 15672
+service:
+  amqpPort: 5672
+  managerPort: 15672
+
+# 连接凭据（生产用 Secret 注入，这里通过环境变量从 smart-invest-secrets 读取）
+auth:
+  username: smartmq
+  passwordEnvRef: RABBITMQ_PASSWORD   # 从 smart-invest-secrets Secret 读取
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+# 持久化（数据落盘，重启不丢）
+persistence:
+  enabled: true
+  size: 1Gi

@@ -1,4 +1,7 @@
 dependencies:
+- name: rabbitmq
+  repository: file://../charts/rabbitmq
+  version: 0.1.0
 - name: user-service
   repository: file://../charts/user-service
   version: 0.1.0
@@ -17,5 +20,5 @@ dependencies:
 - name: frontend
   repository: file://../charts/frontend
   version: 0.1.0
-digest: sha256:fceed76400b293c16010d4dae5dcd0cdcdc9325e9a384bb7df8e7450c52012db
-generated: "2026-08-03T03:10:34.690549+08:00"
+digest: sha256:82492f72ba31f7baa24bf38daad940fb3877243fa1c20a8c5522f4ceaad7312b
+generated: "2026-08-03T03:36:09.105992+08:00"

@@ -15,6 +15,9 @@ appVersion: "1.0.0"
 
 # dependencies 通过 file:// 相对路径引用本地子 chart，无需远程仓库
 dependencies:
+  - name: rabbitmq
+    version: 0.1.0
+    repository: "file://../charts/rabbitmq"
   - name: user-service
     version: 0.1.0
     repository: "file://../charts/user-service"

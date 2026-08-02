@@ -1,0 +1,14 @@
+# =============================================================================
+# RabbitMQ PVC —— 持久化数据
+# =============================================================================
+# K3S 自带 local-path-provisioner，自动创建本地目录卷（对应架构图里的存储层）。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: rabbitmq-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}

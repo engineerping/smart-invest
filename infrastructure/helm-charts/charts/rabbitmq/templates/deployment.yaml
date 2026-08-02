@@ -1,0 +1,54 @@
+# =============================================================================
+# RabbitMQ Deployment —— 官方镜像 + 管理插件 + Prometheus 插件
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "rabbitmq.fullname" . }}
+  labels:
+    app: rabbitmq
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      containers:
+        - name: rabbitmq
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.amqpPort }}
+              name: amqp
+            - containerPort: {{ .Values.service.managerPort }}
+              name: management
+          # 启用管理台 + Prometheus 指标插件
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              rabbitmq-plugins enable --offline rabbitmq_management rabbitmq_prometheus
+              exec docker-entrypoint.sh rabbitmq-server
+          env:
+            - name: RABBITMQ_DEFAULT_USER
+              value: {{ .Values.auth.username | quote }}
+            - name: RABBITMQ_DEFAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: smart-invest-secrets
+                  key: {{ .Values.auth.passwordEnvRef }}
+            # Prometheus 指标暴露在 15692 端口
+            - name: RABBITMQ_PROMETHEUS_PORT
+              value: "15692"
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/rabbitmq
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: rabbitmq-data
