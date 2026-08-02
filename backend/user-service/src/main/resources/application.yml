@@ -29,6 +29,11 @@ spring:
   flyway:
     enabled: true          # 只有 user-service 开启迁移
     locations: classpath:db/migration
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:smartmq}
+    password: ${RABBITMQ_PASSWORD:localdev_only}
 
 # JWT：所有服务共享同一个 secret，才能互相校验 token
 jwt:

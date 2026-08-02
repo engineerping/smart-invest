@@ -38,6 +38,10 @@ public class CommonSecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/api/auth/**", "/actuator/health", "/actuator/prometheus",
                                  "/swagger-ui/**", "/swagger-ui.html", "/v3/api-docs/**").permitAll()
+                // 服务间内部调用（/internal/**）放行：
+                // order-service 调 fund-service 的 latest-nav、fund-service 调 order-service 下单。
+                // 集群内网络相对可信；生产可用 mTLS/服务网格加固。
+                .requestMatchers("/internal/**").permitAll()
                 .anyRequest().authenticated())
             .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
