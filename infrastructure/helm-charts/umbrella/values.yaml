@@ -7,7 +7,7 @@
 
 # 全局镜像 tag：所有服务用同一个版本（部署时由 CI/CD 注入实际版本）
 global:
-  imageTag: latest
+  imageTag: v1
 
 # 敏感配置（部署时用真实值覆盖；这里是演示默认明文，Secret 模板会自动 base64）
 secrets:
@@ -22,34 +22,34 @@ user-service:
   replicaCount: 1
   fullnameOverride: user-service
   image:
-    tag: latest
+    tag: v1
 
 fund-service:
   replicaCount: 1
   fullnameOverride: fund-service
   image:
-    tag: latest
+    tag: v1
 
 order-service:
   replicaCount: 1
   fullnameOverride: order-service
   image:
-    tag: latest
+    tag: v1
 
 notification-worker:
   replicaCount: 1
   fullnameOverride: notification-worker
   image:
-    tag: latest
+    tag: v1
 
 api-gateway:
   replicaCount: 1
   fullnameOverride: api-gateway
   image:
-    tag: latest
+    tag: v1
 
 frontend:
   replicaCount: 1
   fullnameOverride: frontend
   image:
-    tag: latest
+    tag: v1

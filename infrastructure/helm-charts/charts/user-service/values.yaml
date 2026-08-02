@@ -27,7 +27,7 @@ service:
 # 容器资源配置（K8S 靠这个做调度和限制，面试可讲 requests/limits）
 resources:
   requests:
-    cpu: 250m
+    cpu: 100m
     memory: 512Mi
   limits:
     cpu: "1"
@@ -46,6 +46,8 @@ env:
   SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-host:5432/smartinvest"
   SPRING_DATASOURCE_USERNAME: "smartadmin"
   RABBITMQ_HOST: "rabbitmq"
+  RABBITMQ_PORT: "5672"
+  SPRING_RABBITMQ_PORT: "5672"
 
 # 敏感环境变量：从 K8S Secret 注入（values 里只写 key 名，不写值）
 secretEnvRefs:

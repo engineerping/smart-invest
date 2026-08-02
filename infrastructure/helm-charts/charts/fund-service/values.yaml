@@ -16,7 +16,7 @@ service:
 
 resources:
   requests:
-    cpu: 250m
+    cpu: 100m
     memory: 512Mi
   limits:
     cpu: "1"
@@ -34,6 +34,8 @@ env:
   SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-host:5432/smartinvest"
   SPRING_DATASOURCE_USERNAME: "smartadmin"
   RABBITMQ_HOST: "rabbitmq"
+  RABBITMQ_PORT: "5672"
+  SPRING_RABBITMQ_PORT: "5672"
   SERVICES_ORDER_SERVICE_URL: "http://order-service:8083"
 
 secretEnvRefs:

@@ -25,6 +25,11 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      # 把 postgres-host 映射到宿主机 IP（K3S 里访问宿主机 Docker 的 Postgres）
+      hostAliases:
+        - ip: "192.168.31.192"
+          hostnames:
+            - "postgres-host"
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -53,12 +58,12 @@ spec:
             httpGet:
               path: {{ .Values.readinessProbe.path }}
               port: {{ .Values.readinessProbe.port }}
-            initialDelaySeconds: 20
+            initialDelaySeconds: 30
             periodSeconds: 10
           # 存活探针：探测失败 → K8S 杀掉重启（自愈）
           livenessProbe:
             httpGet:
               path: {{ .Values.livenessProbe.path }}
               port: {{ .Values.livenessProbe.port }}
-            initialDelaySeconds: 30
-            periodSeconds: 10
+            initialDelaySeconds: 300
+            periodSeconds: 15
