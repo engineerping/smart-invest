@@ -4,6 +4,19 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <!--
+        =============================================================================
+        Smart Invest 父 POM —— 统一管理所有微服务的依赖版本
+        =============================================================================
+        类比：这是一个 Maven "聚合 + 继承" 的根工程。
+          - <modules> 聚合了所有子服务，一条 mvn 命令就能一起构建
+          - 每个子服务 <parent> 指向这里，继承统一的依赖/插件/属性
+
+        服务的依赖只声明在各自 pom 里，这里只做"版本管理"（dependencyManagement），
+        不实际引入依赖，避免每个服务都打包一堆用不到的 jar。
+        =============================================================================
+    -->
+
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
@@ -17,141 +30,93 @@
     <packaging>pom</packaging>
 
     <name>Smart Invest Parent</name>
-    <description>Parent POM for Smart Invest application</description>
+    <description>Parent POM for Smart Invest microservices</description>
 
+    <!-- 所有模块：共享库 + 4 个业务服务 + API 网关 -->
     <modules>
-        <module>module-user</module>
-        <module>module-fund</module>
-        <module>module-order</module>
-        <module>module-holding</module>
-        <module>module-plan</module>
-        <module>module-scheduler</module>
-        <module>module-notification</module>
-        <module>module-portfolio</module>
-        <module>app</module>
+        <module>common</module>
+        <module>user-service</module>
+        <module>fund-service</module>
+        <module>order-service</module>
+        <module>notification-worker</module>
+        <module>api-gateway</module>
     </modules>
 
     <properties>
         <java.version>21</java.version>
-        <lombok.version>1.18.36</lombok.version>
-        <mapstruct.version>1.6.0</mapstruct.version>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <!-- 统一第三方库版本，避免各服务版本不一致 -->
+        <lombok.version>1.18.36</lombok.version>
+        <jjwt.version>0.12.6</jjwt.version>
+        <spring-cloud.version>2023.0.3</spring-cloud.version>
+        <springdoc.version>2.6.0</springdoc.version>
     </properties>
 
+    <!--
+        dependencyManagement 只声明版本号，不引入依赖。
+        子服务在 <dependencies> 里引用某个 artifact 时，会自动采用这里的版本。
+    -->
     <dependencyManagement>
         <dependencies>
+            <!-- Spring Cloud 统一版本管理（api-gateway 用） -->
             <dependency>
-                <groupId>software.amazon.awssdk</groupId>
-                <artifactId>bom</artifactId>
-                <version>2.26.0</version>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-dependencies</artifactId>
+                <version>${spring-cloud.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
+
+            <!-- JWT 三件套 -->
             <dependency>
                 <groupId>io.jsonwebtoken</groupId>
                 <artifactId>jjwt-api</artifactId>
-                <version>0.12.6</version>
+                <version>${jjwt.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.jsonwebtoken</groupId>
                 <artifactId>jjwt-impl</artifactId>
-                <version>0.12.6</version>
+                <version>${jjwt.version}</version>
             </dependency>
             <dependency>
                 <groupId>io.jsonwebtoken</groupId>
                 <artifactId>jjwt-jackson</artifactId>
-                <version>0.12.6</version>
+                <version>${jjwt.version}</version>
+            </dependency>
+
+            <!-- 内部共享模块 common -->
+            <dependency>
+                <groupId>com.smartinvest</groupId>
+                <artifactId>common</artifactId>
+                <version>${project.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
 
+    <!--
+        所有子模块共享的依赖：Lombok。
+        每个模块编译都需要 Lombok（生成 getter/setter），
+        所以放在父 POM 的 <dependencies> 里，子模块自动继承。
+    -->
     <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-data-jpa</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-security</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-validation</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-actuator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.flywaydb</groupId>
-            <artifactId>flyway-database-postgresql</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.postgresql</groupId>
-            <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-api</artifactId>
-            <version>0.12.6</version>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-impl</artifactId>
-            <version>0.12.6</version>
-            <scope>runtime</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.jsonwebtoken</groupId>
-            <artifactId>jjwt-jackson</artifactId>
-            <version>0.12.6</version>
-            <scope>runtime</scope>
-        </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
+            <version>${lombok.version}</version>
             <optional>true</optional>
-        </dependency>
-        <dependency>
-            <groupId>org.mapstruct</groupId>
-            <artifactId>mapstruct</artifactId>
-            <version>${mapstruct.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.springdoc</groupId>
-            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
-            <version>2.6.0</version>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>ses</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>secretsmanager</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.security</groupId>
-            <artifactId>spring-security-test</artifactId>
-            <scope>test</scope>
         </dependency>
     </dependencies>
 
     <build>
         <pluginManagement>
             <plugins>
+                <!--
+                    父工程默认让 spring-boot 插件跳过打包，
+                    只有真正的可执行服务（带 main 的）在各自 pom 里覆盖为 skip=false。
+                -->
                 <plugin>
                     <groupId>org.springframework.boot</groupId>
                     <artifactId>spring-boot-maven-plugin</artifactId>
@@ -159,6 +124,12 @@
                         <skip>true</skip>
                     </configuration>
                 </plugin>
+                <!--
+                    关键：声明 Lombok 注解处理器。
+                    如果缺失，@Getter/@Setter/@RequiredArgsConstructor 等注解
+                    不会生成代码，编译直接报"找不到方法"。
+                    annotationProcessorPaths 是编译期把注解转成字节码的"编译插件"。
+                -->
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
@@ -171,11 +142,6 @@
                                 <groupId>org.projectlombok</groupId>
                                 <artifactId>lombok</artifactId>
                                 <version>${lombok.version}</version>
-                            </path>
-                            <path>
-                                <groupId>org.mapstruct</groupId>
-                                <artifactId>mapstruct-processor</artifactId>
-                                <version>${mapstruct.version}</version>
                             </path>
                         </annotationProcessorPaths>
                     </configuration>

@@ -1,0 +1,41 @@
+# =============================================================================
+# fund-service 配置
+# =============================================================================
+server:
+  port: 8082
+
+spring:
+  application:
+    name: fund-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/smartinvest}
+    username: ${SPRING_DATASOURCE_USERNAME:smartadmin}
+    password: ${SPRING_DATASOURCE_PASSWORD:localdev_only}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  jpa:
+    hibernate:
+      ddl-auto: validate   # 表结构由 user-service 的 Flyway 管理，这里只做校验
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: false         # 只有 user-service 跑迁移，避免多服务并发建表冲突
+
+jwt:
+  secret: ${JWT_SECRET:smartinvest-demo-secret-key-change-me-please-32bytes}
+  access-token-expiry-ms: 3600000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+logging:
+  level:
+    com.smartinvest: INFO

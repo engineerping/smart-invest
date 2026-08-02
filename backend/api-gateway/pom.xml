@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        api-gateway —— 统一 API 网关
+        =============================================================================
+        职责：作为前端唯一入口，按路径把请求路由到各个微服务。
+        对应架构图里的 Kong Gateway（工业界也可用 Nginx/Envoy/Spring Cloud Gateway）。
+        这里用 Spring Cloud Gateway（Java 生态，和微服务同语言，面试好讲）。
+        关键能力：
+          - 路由：/api/auth/** → user-service 等
+          - CORS：前端跨域在这统一处理
+          - 透传 JWT：不改动 token，各服务自行校验（无状态）
+        注意：网关不做认证，只做转发——鉴权下沉到各服务（简洁，也方便演示）。
+        =============================================================================
+    -->
+
+    <parent>
+        <groupId>com.smartinvest</groupId>
+        <artifactId>smart-invest-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>api-gateway</artifactId>
+    <name>Smart Invest API Gateway</name>
+
+    <dependencies>
+        <!-- Spring Cloud Gateway（Reactive，基于 WebFlux） -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-gateway</artifactId>
+        </dependency>
+        <!-- 健康检查端点 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>false</skip>
+                    <mainClass>com.smartinvest.gateway.ApiGatewayApplication</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

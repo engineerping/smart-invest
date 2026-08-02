@@ -1,0 +1,41 @@
+# =============================================================================
+# notification-worker 配置
+# =============================================================================
+server:
+  port: 8084
+
+spring:
+  application:
+    name: notification-worker
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/smartinvest}
+    username: ${SPRING_DATASOURCE_USERNAME:smartadmin}
+    password: ${SPRING_DATASOURCE_PASSWORD:localdev_only}
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 1
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: false
+
+jwt:
+  secret: ${JWT_SECRET:smartinvest-demo-secret-key-change-me-please-32bytes}
+  access-token-expiry-ms: 3600000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+logging:
+  level:
+    com.smartinvest: INFO

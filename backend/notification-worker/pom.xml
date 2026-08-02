@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        notification-worker —— 通知消费微服务
+        =============================================================================
+        职责：监听 RabbitMQ 的 order.notification 队列，把订单事件写成通知记录。
+        拥有表：notifications（V21 迁移创建）
+        这是一个"Worker"型服务：平时不对外提供 REST 接口（除了查询通知），
+        主要靠消息驱动，体现"事件驱动架构"。
+        =============================================================================
+    -->
+
+    <parent>
+        <groupId>com.smartinvest</groupId>
+        <artifactId>smart-invest-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>notification-worker</artifactId>
+    <name>Smart Invest Notification Worker</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.smartinvest</groupId>
+            <artifactId>common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>false</skip>
+                    <mainClass>com.smartinvest.notification.NotificationWorkerApplication</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

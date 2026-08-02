@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        user-service —— 用户与认证微服务
+        =============================================================================
+        职责：注册、登录、JWT 签发、用户资料、风险测评问卷。
+        拥有表：users, risk_assessments
+        特殊地位：唯一拥有完整用户表和密码的服务；
+                  也因此是唯一执行 Flyway 数据库迁移的服务（V1-V21）。
+                  其他服务连接同一个库，但共用已建好的表，不再各自跑迁移，
+                  避免多个服务并发执行迁移导致冲突。
+        =============================================================================
+    -->
+
+    <parent>
+        <groupId>com.smartinvest</groupId>
+        <artifactId>smart-invest-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>user-service</artifactId>
+    <name>Smart Invest User Service</name>
+
+    <dependencies>
+        <!-- 共享库：JWT/安全/异常处理 -->
+        <dependency>
+            <groupId>com.smartinvest</groupId>
+            <artifactId>common</artifactId>
+        </dependency>
+
+        <!-- Flyway 数据库迁移 -->
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <!-- 覆盖父 POM 的 skip=true，真正打包成可执行 jar -->
+                <configuration>
+                    <skip>false</skip>
+                    <mainClass>com.smartinvest.user.UserServiceApplication</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
