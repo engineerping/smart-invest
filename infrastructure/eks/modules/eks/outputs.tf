@@ -29,11 +29,11 @@ output "cluster_token" {
   sensitive   = true
 }
 
+# ALB DNS 由 K8s AWS Load Balancer Controller 动态创建
+# 不能在此处获取，cloudfront 模块需要使用占位符或通过 data source 延迟获取
+# 方案：CloudFront 先指向 EKS Ingress 的 NLB，NLB DNS 由 K8s 创建后
+# 通过 terraform_remote_state 或外部脚本更新
 output "alb_dns_name" {
-  description = "AWS Load Balancer Controller 的 ALB DNS 名（占位，实际由 K8s 创建）"
-  value       = ""  # 由 K8s Load Balancer Controller 动态创建
-}
-
-data "aws_eks_cluster_auth" "main" {
-  name = aws_eks_cluster.main.name
+  description = "ALB DNS 名（由 K8s Load Balancer Controller 动态创建后手动填入）"
+  value       = var.alb_dns_name_override != "" ? var.alb_dns_name_override : ""
 }

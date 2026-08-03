@@ -91,12 +91,31 @@ resource "aws_s3_bucket_public_access_block" "logs" {
   restrict_public_buckets = true
 }
 
-resource "aws_s3_bucket_server_side_encryption_configuration" "logs" {
-  bucket = aws_s3_bucket.logs.id
-  rule {
-    apply_server_side_encryption_by_default {
-      kms_master_key_id = var.kms_key_arn
-      sse_algorithm     = "aws:kms"
-    }
-  }
+# ==============================
+# 4. S3 桶策略（允许 CloudFront OAC 读取前端桶）
+# ==============================
+# CloudFront 通过 OAC（Origin Access Control）安全地读取 S3 内容
+# 用户不能直接访问 S3 URL，只能通过 CloudFront 访问
+# OAC 的 ARN 由 cloudfront 模块创建后传入
+resource "aws_s3_bucket_policy" "frontend" {
+  bucket = aws_s3_bucket.frontend.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid    = "AllowCloudFrontOACAccess"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudfront.amazonaws.com"
+        }
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.frontend.arn}/*"
+        Condition = {
+          StringEquals = {
+            "aws:SourceArn" = var.cloudfront_distribution_arn
+          }
+        }
+      }
+    ]
+  })
 }

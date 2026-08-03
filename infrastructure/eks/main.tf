@@ -5,7 +5,10 @@
 # 类比于 Java 中的 Main 类 —— 它不实现具体逻辑，只是组织调用
 
 # =============================================================================
-# 1. IAM - 权限管理（最先创建，其他模块依赖）
+# 1. IAM - 权限管理
+# 注意：IAM 模块依赖 EKS 的 OIDC Provider，但因为 Terraform 会自动推导依赖图
+# 所以 IAM 虽然写在前面，实际创建顺序会在 EKS 之后
+# 这在 Terraform 中是完全正确的——声明式代码不需要关心执行顺序
 # =============================================================================
 module "iam" {
   source = "./modules/iam"
@@ -161,10 +164,11 @@ module "acm" {
 module "s3" {
   source = "./modules/s3"
 
-  project_name = var.project_name
-  environment  = var.environment
-  kms_key_arn  = module.kms.key_arn
-  common_tags  = local.common_tags
+  project_name                  = var.project_name
+  environment                   = var.environment
+  kms_key_arn                   = module.kms.key_arn
+  cloudfront_distribution_arn   = module.cloudfront.arn
+  common_tags                   = local.common_tags
 }
 
 # =============================================================================
@@ -268,5 +272,6 @@ module "monitoring" {
   eks_cluster_token    = module.eks.cluster_token
   aurora_cluster_id    = module.aurora.cluster_id
   elasticache_cluster_id = module.elasticache.cluster_id
+  aws_region           = var.aws_region
   common_tags          = local.common_tags
 }

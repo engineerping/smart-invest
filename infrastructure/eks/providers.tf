@@ -38,6 +38,13 @@ terraform {
       source  = "gavinbunney/kubectl"
       version = "~> 1.14"
     }
+
+    # Random Provider：用于生成随机密码、ID 等
+    # 被多个子模块使用（Aurora、Redis、MQ、Grafana 等）
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
 
   # --- 远程状态存储（Backend）---
@@ -51,9 +58,9 @@ terraform {
     # 因为 terraform 块中不能使用变量
     bucket         = "smart-invest-terraform-state"  # S3 桶名
     key            = "eks/terraform.tfstate"          # 状态文件路径
-    region         = "ap-southeast-1"                  # S3 桶所在区域
-    encrypt        = true                              # 服务端加密
-    dynamodb_table = "terraform-state-lock"            # DynamoDB 表用于锁定
+    region         = "ap-southeast-1"                 # S3 桶所在区域
+    encrypt        = true                             # 服务端加密
+    dynamodb_table = "terraform-state-lock"           # DynamoDB 表用于锁定
   }
 }
 
@@ -71,4 +78,60 @@ provider "aws" {
 provider "aws" {
   alias  = "dr"            # 给这个 Provider 起个别名，使用时要写 provider = aws.dr
   region = var.dr_region   # 例如 ap-southeast-3（雅加达）
+}
+
+# =============================================================================
+# Kubernetes Provider 配置
+# =============================================================================
+# K8s Provider 用于管理 EKS 集群内的资源（Namespace、ServiceAccount 等）
+# 它通过 EKS 集群的 API Server 端点和认证 Token 来连接集群
+#
+# 【重要】这个 Provider 必须在 EKS 集群创建完成后才能使用
+# 因此所有依赖它的资源都应该有 depends_on = [module.eks]
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.main.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.main.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.main.token
+}
+
+# =============================================================================
+# Helm Provider 配置
+# =============================================================================
+# Helm Provider 用于在 EKS 集群中安装 Helm Chart（Istio、Prometheus 等）
+# 它通过 Kubernetes Provider 的配置来连接集群
+provider "helm" {
+  kubernetes {
+    host                   = data.aws_eks_cluster.main.endpoint
+    cluster_ca_certificate = base64decode(data.aws_eks_cluster.main.certificate_authority[0].data)
+    token                  = data.aws_eks_cluster_auth.main.token
+  }
+}
+
+# =============================================================================
+# Kubectl Provider 配置
+# =============================================================================
+# Kubectl Provider 用于执行 kubectl apply 命令（部署 CRD 等 K8s 资源）
+provider "kubectl" {
+  host                   = data.aws_eks_cluster.main.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.main.certificate_authority[0].data)
+  token                  = data.aws_eks_cluster_auth.main.token
+  load_config_file       = false  # 不使用本地 kubeconfig，直接连接
+}
+
+# =============================================================================
+# EKS 集群数据源（供 K8s/Helm/Kubectl Provider 使用）
+# =============================================================================
+# 这解决了"鸡与蛋"的问题：
+#   - K8s/Helm/Kubectl Provider 需要 EKS 集群的信息才能连接
+#   - 但 EKS 集群是由 Terraform 创建的资源
+#   - 解决方案：使用 data source 引用已创建的 EKS 集群
+#     Terraform 会自动推导出依赖关系，先创建 EKS 再初始化 K8s Provider
+data "aws_eks_cluster" "main" {
+  name       = module.eks.cluster_name
+  depends_on = [module.eks]
+}
+
+data "aws_eks_cluster_auth" "main" {
+  name       = module.eks.cluster_name
+  depends_on = [module.eks]
 }

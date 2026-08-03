@@ -61,26 +61,15 @@ resource "aws_cloudfront_distribution" "main" {
     cached_methods         = ["GET", "HEAD", "OPTIONS"]
 
     # 缓存策略：动态 API 不缓存（CacheDisabled）
+    # 使用 AWS 管理的 Cache Policy 和 Origin Request Policy
+    # 注意：cache_policy_id 和 forwarded_values 是互斥的，不能同时使用
     cache_policy_id = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"
 
-    # 源请求策略：传递所有必要的头部
+    # AllViewerExceptHostHeader：传递所有请求头和查询参数，排除 Host 头
     origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"
 
-    # 转发到源站的头部
-    forwarded_values {
-      query_string = true
-      headers      = [
-        "Authorization",
-        "Origin",
-        "Accept",
-        "Content-Type",
-        "X-Forwarded-For",
-        "X-Correlation-ID",  # 自定义链路追踪 ID
-      ]
-      cookies {
-        forward = "all"
-      }
-    }
+    # 响应头策略：允许 CORS 跨域访问
+    response_headers_policy_id = "67f7725c-6f97-4210-82d7-5512b31e9d03"
   }
 
   # --- 静态资源缓存行为（/static/* 和 /assets/*）---
@@ -92,15 +81,9 @@ resource "aws_cloudfront_distribution" "main" {
     cached_methods         = ["GET", "HEAD", "OPTIONS"]
 
     # 静态资源缓存策略（CachingOptimized）
+    # 使用 AWS 管理的 CachingOptimized 策略
     # 默认 TTL：86400 秒（1天），最大 31536000 秒（1年）
     cache_policy_id = "658327ea-f89d-4fab-a63d-7e88669e58f6"
-
-    forwarded_values {
-      query_string = false  # 静态资源不依赖查询参数，关闭以提升缓存命中率
-      cookies {
-        forward = "none"
-      }
-    }
   }
 
   ordered_cache_behavior {
@@ -110,13 +93,6 @@ resource "aws_cloudfront_distribution" "main" {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD", "OPTIONS"]
     cache_policy_id        = "658327ea-f89d-4fab-a63d-7e88669e58f6"
-
-    forwarded_values {
-      query_string = false
-      cookies {
-        forward = "none"
-      }
-    }
   }
 
   # --- 查看器证书 ---

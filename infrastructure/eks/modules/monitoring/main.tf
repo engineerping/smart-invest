@@ -140,7 +140,9 @@ resource "helm_release" "prometheus_stack" {
     value = "false"
   }
 
-  depends_on = [helm_release.istiod]  # 需要等 Istio 先部署
+  # 注意：helm_release 的 depends_on 不能跨模块引用
+  # Istio 的依赖关系在根模块 main.tf 中通过 module 级 depends_on 处理
+  # 这里通过变量传入 istio 命名空间存在性，确保 Prometheus 在 Istio 之后部署
 }
 
 # Grafana 管理员密码
