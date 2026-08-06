@@ -163,6 +163,33 @@ resource "helm_release" "smart_invest" {
 
 但这不改变它们的定位：**Terraform 调用 Helm → Terraform 管整个部署流水线，Helm 专注于 K8S 应用的打包和生命周期**。
 
+### 2.5.1 真实历史：没有 Helm 的时代，大家部署应用,是用【`kubectl` + shell 】还是用 【Terraform】？
+
+**主流从来不是 Terraform，而是 `kubectl` + shell 脚本 + `sed` 替换变量。**
+
+根本原因：Terraform 的 K8S Provider 出生太晚——
+
+```
+2015.07  K8S 1.0 GA
+2017.07  Terraform Kubernetes Provider 首次发布（晚了 3 年）
+2018.06  Helm 已从 CNCF 毕业
+2018.07  Terraform Helm Provider 才发布
+```
+
+中间 3 年真空期，用户只能用 kubectl + shell，并成为习惯默认。
+
+为什么 Terraform 管 K8S 资源体验糟糕：
+
+- **HCL 映射 YAML = 双重翻译**：10 行 YAML 要写 50 行 HCL，还得多维护一层字段转换
+- **哲学冲突 → 状态漂移（state drift）**：K8S 是持续协调（"要 3 副本"→ 少了就补），Terraform 是一次性 apply（手动 `kubectl scale 5` 后，下次 `terraform apply` 会缩回 3）
+- **生命周期不匹配**：K8S Deployment 自己就会滚动更新，Terraform state 的粒度（几十个资源一个 state）跟不上 K8S 一天多次的变更频率
+
+**Terraform 管 K8S 的唯一合理场景**：创建集群本身（EKS/GKE）、集群级基础资源（Namespace/RBAC/StorageClass，只建一次很少变）、集群级组件（cert-manager 等，通过 `helm_release` 调用 Helm Chart 而非手写 YAML）。
+
+演进路径：kubectl 独霸（2015-2017）→ Helm1/2 兴起但受 Tiller 安全拖累（2017-2019）→ **Helm3 移除 Tiller 后成为事实标准**（2019-至今）→ GitOps 时代（ArgoCD/Flux 用 `helm template` 渲染 + git 仓库驱动自动同步）。
+
+> 一句话：**Terraform 管「集群从哪来」（EC2/VPC/EKS），Helm 管「集群里跑什么应用」；没有 Helm 时大家用 kubectl + shell 硬扛，不是因为好用，而是没得选。**
+
 ---
 
 ## 3. 没有 Helm 的世界——K8S 原生的痛苦
