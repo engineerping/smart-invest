@@ -10,8 +10,8 @@ apiVersion: v2
 name: smart-invest
 description: Smart Invest 微服务全家桶聚合 chart
 type: application
-version: 0.1.0
-appVersion: "1.0.0"
+version: 0.2.0
+appVersion: "1.1.0"
 
 # dependencies 通过 file:// 相对路径引用本地子 chart，无需远程仓库
 dependencies:
@@ -36,3 +36,12 @@ dependencies:
   - name: frontend
     version: 0.1.0
     repository: "file://../charts/frontend"
+  # === 演示：如果想加远程依赖（如 Redis），就把下面取消注释 ===
+  # 和 file:// 的区别：
+  #   1. 需要先 helm repo add bitnami https://charts.bitnami.com/bitnami
+  #   2. helm dependency update 会从远程下载 .tgz 到 charts/ 目录
+  #   3. condition 字段可控制是否安装（values 里 redis.enabled: true/false）
+  # - name: redis
+  #   version: 20.0.5
+  #   repository: "https://charts.bitnami.com/bitnami"
+  #   condition: redis.enabled

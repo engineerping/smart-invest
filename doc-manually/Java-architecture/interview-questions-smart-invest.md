@@ -1,6 +1,6 @@
 # Smart-Invest 架构 & 金融项目 面试题库（含答案）
 
-> 基于 [smart-invest-aws-plan-d-architecture.drawio](../docs/smart-invest-aws-plan-d-architecture.drawio) 与 [2026-04-08-aws-deployment-plan-d.md](../docs/superpowers/specs/2026-04-08-aws-deployment-plan-d.md)，针对 HSBC FlexInvest 类公募基金投资平台的面试准备。
+> 基于 [smart-invest-aws-plan-d-architecture.drawio](../../docs/smart-invest-aws-plan-d-architecture.drawio) 与 [2026-04-08-aws-deployment-plan-d.md](../../docs/superpowers/specs/2026-04-08-aws-deployment-plan-d.md)，针对 HSBC FlexInvest 类公募基金投资平台的面试准备。
 > 覆盖 Solutions Architect Professional、Senior Backend、SRE/Platform、金融行业领域等视角。
 > **答案说明：假设读者是有一定 Java/Spring Boot 开发经验，但对分布式系统、云计算、金融业务处于学习阶段的开发者。答案中穿插了大量生活化比喻，帮助理解抽象概念。**
 

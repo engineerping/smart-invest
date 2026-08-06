@@ -53,3 +53,9 @@ frontend:
   fullnameOverride: frontend
   image:
     tag: v1
+
+# === 演示：远程依赖 Redis 的条件开关 ===
+# 配合 Chart.yaml 中注释掉的 redis 依赖使用
+# condition: redis.enabled 指向这里
+# redis:
+#   enabled: false
