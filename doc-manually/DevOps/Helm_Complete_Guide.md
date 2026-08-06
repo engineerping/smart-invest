@@ -372,16 +372,16 @@ Tiller 的职责：
    # 任何能连到 Tiller 的人都能操作集群
    kubectl -n kube-system get deploy tiller-deploy
    # Tiller 用 cluster-admin ServiceAccount 运行
-   # RBAC 配置很复杂，很多团队干脆不配 → 安全隐患
+   # RBAC(Role-Based Access Control) 配置很复杂，很多团队干脆不配 → 安全隐患
 
 2. 状态存储冲突:
    # 多个用户同时操作同一个 Release → Tiller 串行处理
    # Tiller 升级/重启期间 → 所有部署操作全部阻塞
    # 单点故障
 
-3. 与 K8S RBAC 不统一:
+3. 与 K8S RBAC(Role-Based Access Control) 不统一:
    # Tiller 有自己的一套权限
-   # K8S 自己有 RBAC
+   # K8S 自己有 RBAC(Role-Based Access Control)
    # 两套权限体系并存 → 混乱
 ```
 
@@ -406,8 +406,8 @@ Helm3 架构:
 **核心思想**：
 
 1. **helm CLI 直接用 K8S API**——不再经过 Tiller 中间层
-2. **用当前用户的 kubeconfig RBAC**——和 kubectl 权限完全一致，零额外配置
-3. **Release 历史存在 K8S Secret 里**——在对应的 namespace 下，自然继承 RBAC 隔离
+2. **用当前用户的 kubeconfig RBAC(Role-Based Access Control)**——和 kubectl 权限完全一致，零额外配置
+3. **Release 历史存在 K8S Secret 里**——在对应的 namespace 下，自然继承 RBAC(Role-Based Access Control) 隔离
 
 ```bash
 # 查看 Release 历史实际存储位置
@@ -815,7 +815,7 @@ Helm3 模板不能：
 - 执行系统命令
 - 创建子进程
 
-这保证了 `helm install https://some-evil-chart.com/evil.tgz` 也不会在**你的机器**上执行恶意代码——最多在集群里创建 K8S 资源（受 RBAC 限制）。
+这保证了 `helm install https://some-evil-chart.com/evil.tgz` 也不会在**你的机器**上执行恶意代码——最多在集群里创建 K8S 资源（受 RBAC(Role-Based Access Control) 限制）。
 
 ---
 
@@ -829,7 +829,7 @@ Helm3 模板不能：
 Helm2                          Helm3
 ─────────────────────────      ─────────────────────────
 有 Tiller（集群内 gRPC 服务）   无 Tiller（客户端直连 API）
-两套权限（Tiller + RBAC）      只用 K8S RBAC
+两套权限（Tiller + RBAC(Role-Based Access Control)）      只用 K8S RBAC(Role-Based Access Control)
 Release 存在 ConfigMap          存在 Secret
 Lua 钩子                        K8S Job 钩子
 不支持 OCI Registry             原生支持 OCI（helm push oci://...）
