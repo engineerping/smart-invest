@@ -288,11 +288,11 @@ curl -k https://127.0.0.1:6443/api/v1/namespaces/smart-invest/pods
 
 ### 4.2 etcd(Editable Text Configuration-Distributed)（数据库）——集群的「真理之源」
 
-| 属性 | 说明 |
-|------|------|
-| **全称** | `/etc` distributed。名字来自 Linux `/etc`Editable Text Configuration) 目录（存配置）+ distributed（分布式） |
-| **身份** | 分布式强一致的 Key-Value 存储。K8s 所有状态都存在这里 |
-| **类比** | MySQL/PostgreSQL——但 etcd 是 KV 而不是 SQL。用 Raft 协议保证强一致性 |
+| 属性 | 说明                                                                                          |
+|------|---------------------------------------------------------------------------------------------|
+| **全称** | `/etc` distributed。名字来自 Linux `/etc`(Editable Text Configuration) 目录（存配置）+ distributed（分布式） |
+| **身份** | 分布式强一致的 Key-Value 存储。K8s 所有状态都存在这里                                                          |
+| **类比** | MySQL/PostgreSQL——但 etcd 是 KV 而不是 SQL。用 Raft 协议保证强一致性                                       |
 
 **存了什么：**
 - 所有 Deployment/Service/Pod/ConfigMap……的 YAML
@@ -365,8 +365,8 @@ Step 2: Scoring（打分 / 软偏好）
 1. 接收 Scheduler 分配的 Pod（读 apiserver 中 `.spec.nodeName == 本节点` 的 Pod）
 2. 调用 CRI（Container Runtime Interface）启动容器（→ containerd → runc → 容器进程）
 3. 调用 CNI（Container Network Interface）给 Pod 分配 IP
-4. 挂载 Volume（调用 CSI）
-5. 执行 Liveness/Readiness Probe，不健康则重启容器
+4. 调用 CSI (Container Storage Interface）挂载 Volume
+5. 执行 Liveness Probe/Readiness Probe，(存活探针/就绪探针)不健康则重启容器
 6. 上报节点状态和 Pod 状态回 apiserver
 
 ### 5.2 kube-proxy ——节点上的网络规则维护者
@@ -435,18 +435,22 @@ kube-proxy 在 iptables 中写规则：
 
 ```yaml
 # 你的 smart-invest 项目中 user-service 的实际 Deployment
+# （教学简化版：把 Helm 模板变量都替换成了具体值，方便初学理解）
+# 仓库里的真实模板见下文 6.2.1 对照块
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: user-service
+  labels:                                    # ① 这个 labels 只属于 Deployment 自己
+    app: user-service                        #    是给 Deployment 对象本身打标签
 spec:
   replicas: 3                               # 期望 3 个 Pod
-  selector:
+  selector:                                  # ② 这个 selector 管的是 Deployment 要管哪些 Pod
     matchLabels:
       app.kubernetes.io/name: user-service
-  template:                                  # Pod 模板（跟 Java 泛型模板一个概念）
+  template:                                  # ③ Pod 模板（跟 Java 泛型模板一个概念）
     metadata:
-      labels:
+      labels:                                # ④ 这里的 labels 才会盖到 Pod 上！源头在这
         app.kubernetes.io/name: user-service
     spec:
       containers:
@@ -455,6 +459,86 @@ spec:
         ports:
         - containerPort: 8081
 ```
+
+> [!NOTE] 教学版 vs 真实代码
+> 上面是**教学简化版**（把 `{{ .Values.xxx }}` 都换成了具体值）。仓库里真正的模板是 **Helm Chart**，路径：
+> `infrastructure/helm-charts/charts/user-service/templates/deployment.yaml`
+> 结构完全一致，只是值来自 `values.yaml`。下面 6.2.1 给出真实模板骨架，方便对照「文档教的是同一份东西」。
+
+### 6.2.1 真实 Helm 模板对照（以 user-service 为例）
+
+```yaml
+# infrastructure/helm-charts/charts/user-service/templates/deployment.yaml
+# 教学版里的「具体值」在真实代码中都是 {{ .Values.xxx }} 模板变量
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "svc.fullname" . }}        # = 教学版里的 user-service
+  labels:
+    {{- include "svc.labels" . | nindent 4 }}  # ① 这里给 Deployment 本身打标签
+spec:
+  replicas: {{ .Values.replicaCount }}        # = 教学版里的 3
+  selector:                                    # ② Deployment 要管哪些 Pod
+    matchLabels:
+      app.kubernetes.io/name: {{ include "svc.name" . }}
+  template:                                    # ③ Pod 模板
+    metadata:
+      labels:
+        {{- include "svc.labels" . | nindent 8 }}  # ④ 这里的 labels 才会盖到 Pod 上！
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      # 把 postgres-host 映射到宿主机 IP（K3S 里访问宿主机 Docker 的 Postgres）
+      hostAliases:
+        - ip: "192.168.31.192"
+          hostnames:
+            - "postgres-host"
+      containers:
+        - name: {{ .Chart.Name }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: {{ .Values.service.port }}
+          # 非敏感环境变量从 values.env 读（部署时合并）
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            # 敏感环境变量从 K8S Secret 注入（值存在集群里，不写进代码）
+            {{- range .Values.secretEnvRefs }}
+            - name: {{ . }}
+              valueFrom:
+                secretKeyRef:
+                  name: smart-invest-secrets
+                  key: {{ . }}
+            {{- end }}
+          # 资源限制：requests 是「保证」，limits 是「上限」
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          # 就绪探针：就绪前不接流量（滚动更新时保证新旧交替不中断）
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.path }}
+              port: {{ .Values.readinessProbe.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          # 存活探针：探测失败 → K8S 杀掉重启（自愈）
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.path }}
+              port: {{ .Values.livenessProbe.port }}
+            initialDelaySeconds: 300
+            periodSeconds: 15
+```
+
+> [!NOTE] 关键对照点
+> - **教学版的 `user-service`** = 模板里的 `{{ include "svc.fullname" . }}`（由 Chart name + release 拼接）
+> - **教学版的 `replicas: 3`** = `{{ .Values.replicaCount }}`（在 `values.yaml` 里配置）
+> - **教学版的 `app.kubernetes.io/name`** 两处 labels（①②④）在真实模板里都来自 `svc.labels` 这个公共 helper——所以 Service 的 selector 只要也用同一个 helper，两边必然一致，天然不会写错
+> - **教学版没画全的**（env / resources / probe）：真实模板还有环境变量注入、资源限制、就绪/存活探针
 
 **Deployment 的滚动更新（Rolling Update）：**
 ```
@@ -584,8 +668,57 @@ spec:
     targetPort: 8081                         # Pod 上容器的端口
     protocol: TCP
 ```
+> [!CAUTION]
+> **Service 是通过 selector 匹配 Pod 的 labels 来找到后端的。**
+> 这就是为什么 `kubectl get endpoints` 为空时说明 labels 没对上或 Pod 不 Ready。所以当 `kubectl get endpoints` 为空,优先检查 labels 是否匹配、Pod 是否 Running & Ready。
 
-**Service 是通过 selector 匹配 Pod 的 labels 来找到后端的。** 这就是为什么 `kubectl get endpoints` 为空时说明 labels 没对上或 Pod 不 Ready。
+> [!WARNING] 更详细地说: Service 找后端的方式：label 匹配，不是名字匹配
+>
+> **Service 是通过 `spec.selector` 匹配 Pod 的 labels 来找到后端的。**
+> 而 Pod 的 labels 根源，在 Deployment 的 **`spec.template.metadata.labels`**（不是顶层的 `metadata.labels`）。
+> 当 `kubectl get endpoints` 为空时，依次排查：① Service 的 selector 和 Deployment 的 Pod 模板 labels 是否一致；② Pod 是否处于 Running & Ready。
+
+**① 为什么用 selector 匹配，而不直接写 Pod 名字/IP？** —— Pod 的 IP 和名字每次重建都会变，只有 label 是稳定的。所以 Service 只认 label，不认 IP；label 匹配上的 Pod，IP 才会被写进 Endpoints。
+
+**② Pod 的 labels 根源到底在哪？** —— 在 Deployment 的 `spec.template.metadata.labels`，不是顶层的 `metadata.labels`。注意别混淆这两处：
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  labels:                                    # ① 这个 labels 只属于 Deployment 自己
+    app: user-service                        #    是给 Deployment 对象本身打标签
+spec:
+  selector:                                  # ② 这个 selector 管的是 Deployment 要管哪些 Pod
+    matchLabels:
+      app: user-service
+  template:                                  # ③ Pod 模板，真正生成 Pod 的地方
+    metadata:
+      labels:                                # ④ 这里的 labels 才会盖到 Pod 上！源头在这
+        app: user-service
+        app.kubernetes.io/name: user-service
+    spec:
+      containers:
+      - name: user-service
+        image: ...
+```
+
+所以排查口诀是：**Service 的 selector 要匹配的，是 Deployment 的 `spec.template.metadata.labels`，而不是 `metadata.labels`。**
+
+**③ `app.kubernetes.io/name` 是什么？** —— 它是 K8s 官方的 **Recommended Labels（推荐标签）** 约定。`app.kubernetes.io` 是前缀，表示这个 key 是 Kubernetes 社区规范定义的；`name` 表示应用的名字。它不是必须的——只要 Service.selector 和 Pod 模板 labels 两边 key-value 一致就能匹配，用 `app: user-service` 这种朴素写法也行。推荐标签的价值在于：Helm、Prometheus、Kustomize 等工具都认得这套标准 key，打了一致的标签，整套工具链才能自动把「这是哪个应用、哪个实例、哪个组件」关联起来。
+
+**④ 从 Deployment 到 Endpoints 的完整链路：**
+
+```
+Deployment.spec.template.metadata.labels     ← 源头：Pod 的标签在这定义
+        ↓ K8s 创建 Pod 时盖上
+Pod.metadata.labels                          ← Pod 带着这些标签
+        ↓ 控制面比对
+Service.spec.selector                        ← 匹配条件，决定后端是哪些 Pod
+        ↓ 匹配成功
+Endpoints 里出现这些 Pod 的 IP               ← kubectl get endpoints 能看到
+```
 
 ### 7.2 CoreDNS ——集群内的 DNS 服务
 
