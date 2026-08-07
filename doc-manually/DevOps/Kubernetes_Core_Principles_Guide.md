@@ -290,7 +290,7 @@ curl -k https://127.0.0.1:6443/api/v1/namespaces/smart-invest/pods
 
 | 属性 | 说明 |
 |------|------|
-| **全称** | `/etc` distributed。名字来自 Linux `/etc` 目录（存配置）+ distributed（分布式） |
+| **全称** | `/etc` distributed。名字来自 Linux `/etc`Editable Text Configuration) 目录（存配置）+ distributed（分布式） |
 | **身份** | 分布式强一致的 Key-Value 存储。K8s 所有状态都存在这里 |
 | **类比** | MySQL/PostgreSQL——但 etcd 是 KV 而不是 SQL。用 Raft 协议保证强一致性 |
 
