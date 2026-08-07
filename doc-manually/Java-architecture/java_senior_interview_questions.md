@@ -997,7 +997,7 @@ spring:
 - **P（Partition Tolerance）**：网络分区容忍
 
 网络分区在分布式中不可避免，所以实际是在 **CA 之间取舍**：
-- **CP 系统**：ZooKeeper、Etcd（强一致性，分区时拒绝服务）
+- **CP 系统**：ZooKeeper、etcd（强一致性，分区时拒绝服务）
 - **AP 系统**：Eureka、Cassandra（可用性，分区时返回旧数据）
 
 **BASE 理论（AP 系统的实践）：**

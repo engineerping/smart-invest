@@ -231,7 +231,7 @@ cloudWatch:
   clusterLogging:
     enableTypes: ["api", "audit", "authenticator", "controllerManager", "scheduler"]
 
-# 加密 etcd（存储所有 K8s secrets）
+# 加密 etcd(Editable Text Configuration-Distributed)（存储所有 K8s secrets）
 secretsEncryption:
   keyARN: arn:aws:kms:us-east-1:123456789:key/xxx
 

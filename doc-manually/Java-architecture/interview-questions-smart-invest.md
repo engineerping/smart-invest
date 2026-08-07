@@ -869,7 +869,7 @@ K8s Network Policy 说：
 1. **私有 API Endpoint**（不要开公有端点！）
    > 想象你的公司大门，不需要把内部会议室的门牌号公开给所有人
 
-2. **etcd KMS 加密**
+2. **etcd(Editable Text Configuration-Distributed) KMS 加密**
    > 存放在 etcd 里的数据（Pod 配置、Secret 引用等）默认是加密的，防止 AWS 员工偷看你的数据
 
 3. **OIDC Provider（认证入口）**
