@@ -22,7 +22,7 @@
 | 八 | 配置与存储（ConfigMap / Secret / PVC / PV）                                    |
 | 九 | 弹性伸缩（HPA / VPA / Cluster Autoscaler）                                    |
 | 十 | 自我修复机制（Probe / ReplicaSet 自愈 / Node Controller）                         |
-| 十一 | 完整调度流程：一个 Pod 的诞生                                                       |
+| 十一 | 完整调度流程：一个 Pod 的诞生 + K8s Events 机制                                                       |
 | 十二 | K8s 生态核心工具清单                                                            |
 | 附 A | 关键缩写全称速查                                                                |
 | 附 B | 用你的 smart-invest 项目验证原理                                                 |
@@ -887,7 +887,7 @@ Scheduler 把 Pod 调度到新节点
 
 ```
 Readiness Probe 失败 → kubelet 把 Pod 从 Service Endpoints 移除（不接流量）
-Liveness Probe 失败  → kubelet 杀掉容器并重建（kubelet 调 CRI → containerd → runc）
+Liveness Probe 失败  → kubelet 杀掉容器并重建（kubelet 调 CRI（Container Runtime Interface） → containerd → runc）
 ```
 
 ### 10.2 ReplicaSet 自愈
@@ -939,7 +939,7 @@ kubectl apply -f deployment.yaml
 
 4. ReplicaSet Controller（in controller-manager）:
    「收到事件：有一个新 ReplicaSet，replicas=3」
-   → 创建 3 个 Pod 对象（此时 .spec.nodeName 为空），存入 etcd
+   → 创建 3 个 Pod 对象[注意这不是真正运行在 worker 节点的 Pod, 而是存储于 etcd 中的对于 Pod 的描述信息]（此时 .spec.nodeName 为空），存入 etcd
 
 5. Scheduler:
    「收到事件：有 3 个 unbound Pod（.spec.nodeName 为空）」
@@ -949,12 +949,12 @@ kubectl apply -f deployment.yaml
    → 更新 etcd
 
 6. kubelet（on node-2）:
-   「收到事件：我（node-2）被分配了一个 Pod」
+   通过 apiserver Watch 到「收到事件：我（node-2）被分配了一个 Pod」
    → 调用 CRI（Container Runtime Interface）→ containerd → runc
    → 创建 Linux Namespace（PID/NET/MNT...）
    → 设置 Cgroups（CPU/Memory limits）
-   → 从 Registry 拉镜像
-   → 在 UnionFS 只读层之上创建可写层
+   → 从 Registry 拉取容器镜像
+   → 在镜像的只读层之上创建可写层（容器的联合文件系统 UnionFS 由此形成）
    → 启动容器进程：java -jar app.jar
 
 7. kubelet:
@@ -970,12 +970,170 @@ kubectl apply -f deployment.yaml
    「收到事件：Endpoints 列表变了」
    → 更新 iptables 规则：新 Pod IP 加入负载均衡池
 
-10. 请求来了 → Service ClusterIP → iptables 转发到 Pod IP → 容器收到请求
+10. 请求来了 → Service 的 ClusterIP（虚拟 IP）→ iptables 转发到 Pod IP → 容器收到请求
 ```
 
 **面试时你只需要记住核心逻辑链条：**
 ```
 Deployment → ReplicaSet → Pod（unbound）→ Scheduler 分配节点 → kubelet 启动容器 → kube-proxy 更新网络规则
+```
+
+### 面试技巧
+
+- 使用**watch/event词汇**：*watch*、*event*、*reconcile（调和）<瑞肯塞袄>*、*desired state*、*current state*、*reconcile loop*、*control loop*。控制器负责将实际状态调和到期望状态。
+
+- 强调两个循环：**控制平面**（API 服务器 + 控制器 + 调度器）仅操作 etcd 中的对象；**数据平面**（kubelet、kube-proxy）才是实际运行容器和处理流量的。
+
+- 如果被问到“Pod 的节点在哪里确定？”——回答：**由调度器通过写入 `.spec.nodeName` 来确定**。kubelet 本身不会选择节点；它只会执行分配的节点。
+
+- 强调每个步骤都是**事件驱动且幂等的**——如果出现故障，控制器会重试并再次进行调和。这就是为什么 Kubernetes 被称为*自愈*系统的原因。
+
+---
+
+## 11. (English) Full Scheduling Flow: The Birth of a Pod
+
+> 面试口述版。面试官用英文提问时，按这个思路讲。核心是**按「谁收到事件 → 干了什么 → 写进 etcd」的节奏**讲，别背稿。
+
+### The one-liner
+
+When you run `kubectl apply -f deployment.yaml`, the entire cluster reacts through a chain of **controllers watching the etcd-based API** — each one responding to events and taking its own small step.
+
+### The flow (interview walk-through)
+
+1. **kubectl → API Server**
+   - kubectl encodes your YAML as JSON and sends an **HTTP POST** to the `kube-apiserver`.
+
+2. **API Server (the front door)**
+   - **Authentication** — does the client have a valid certificate/token?
+   - **Authorization** — does the client's RBAC role allow this action?
+   - **Admission** — passes through *Mutating / Validating Admission Webhooks* (e.g. Istio sidecar injection).
+   - If all checks pass, the object is **persisted to etcd** — the source of truth.
+
+3. **Deployment Controller** (runs inside `controller-manager`)
+   - Watches for Deployment objects. Sees a new Deployment in namespace `smart-invest`.
+   - **Creates a ReplicaSet** with the desired state (e.g. `replicas: 3`) and writes it to etcd.
+
+4. **ReplicaSet Controller** (also in `controller-manager`)
+   - Watches for ReplicaSets. Sees a new one with `replicas: 3`.
+   - **Creates 3 Pod objects** [*Note:It is not real a pod that laying on worker node,It is only the description of a set of pod that stored in etcd*] — at this moment their `.spec.nodeName` is still empty (they are *unbound*,did not be bounded to any node).
+
+5. **Scheduler**
+   - Watches for Pods with an empty `.spec.nodeName`.
+   - For each Pod it runs two phases:
+     - **Filtering** — filter out nodes that can't run the Pod (insufficient resources, taints, node selectors).
+     - **Scoring** — score the remaining candidates and pick the best one (e.g. `node-2`).
+   - Binds the Pod by **setting `.spec.nodeName = "node-2"`** and updates etcd.
+
+6. **kubelet** (the agent on `node-2`)
+   - Watches **the API server** for Pods assigned to this node.
+   - Calls **CRI** (Container Runtime Interface) → `containerd` → `runc`:
+     - Creates Linux namespaces (PID / NET / MNT / ...),
+     - Sets up cgroups (CPU & memory limits),
+     - Pulls the docker image from the registry,
+     - Creates a writable layer on top of the read-only docker image layers (in the UnionFS(联合文件系统) of the container that will be created),
+     - Starts the container process, e.g. `java -jar app.jar`.
+
+7. **kubelet → readiness**
+   - Calls **CNI** (Container Network Interface) to allocate a Pod IP.
+   - Runs the **Readiness Probe**; once it passes, marks the Pod **Ready**.
+   - Reports Pod status back to the API server.
+
+8. **Endpoints Controller** (in `controller-manager`)
+   - Watches Pod readiness. When a Pod becomes Ready, it **adds the new Pod's IP to the Service's Endpoints list**.
+
+9. **kube-proxy** (runs on every node)
+   - Watches the Endpoints list. On change, it **updates iptables rules** so the new Pod IP joins the load-balancing pool.
+
+10. **Traffic arrives**
+    - Client hits the Service's `ClusterIP` → iptables forwards to the Pod IP → the container receives the request.
+
+### The chain to memorize
+
+```
+Deployment → ReplicaSet → Pod (unbound) → Scheduler binds a node
+→ kubelet starts the container → kube-proxy updates network rules
+```
+
+### Interview tips
+
+- Use the **watch/event vocabulary**: *watch*, *event*, *reconcile(调和)<瑞肯塞袄>*, *desired state*, *current state*, *reconcile loop*, *control loop*. Controllers reconcile the actual state toward the desired state.
+- Emphasize the two loops: the **control plane** (API server + controllers + scheduler) only manipulates objects in etcd; the **data plane** (kubelet, kube-proxy) is what actually runs containers and traffic.
+- If asked "where does the Pod's node get decided?" — answer: **the Scheduler, by writing `.spec.nodeName`**. kubelet never picks a node itself; it only obeys what's assigned.
+- Mention that every step is **event-driven and idempotent** — if something fails, the controller simply retries and reconciles again. That's why Kubernetes is called a *self-healing* system.
+
+---
+
+### K8s Events 在这个流程中扮演的角色 / The Role of K8s Events in This Flow
+
+K8s 中的 "Event" 有两层含义，面试和排查问题时都要知道：
+
+| 层次 | 含义 | 本质 | 你能看到吗？                                                   |
+|------|------|------|----------------------------------------------------------|
+| **Watch Event** | Controller 通过 List-Watch 机制监听到的资源变更通知 | API Server 以长连接推送给 Watcher 的增量 JSON 消息 | 不能直接看到，是内部机制                                             |
+| **Event 资源** | `kubectl describe pod` 看到的记录，类似日志 | 存储在 etcd 中的一个 Event 对象（命名空间级别） | ✅ `kubectl describe pod <pod-name> -n <namepspace>` 直接看到 |
+
+**上面 10 步流程中每一步的 Watch Event（控制器如何感知变化）：**
+
+| 步骤 | 谁 Watch 了什么 | 触发条件 | 产生的副作用 |
+|------|----------------|---------|-------------|
+| 1 → 2 | — | kubectl HTTP POST（唯一不是 Watch 触发的步骤） | Deployment 写入 etcd |
+| 2 → 3 | Deployment Controller Watch `Deployment` 资源 | etcd 中出现了新的 Deployment（`ADDED` watch event） | 创建 ReplicaSet |
+| 3 → 4 | ReplicaSet Controller Watch `ReplicaSet` 资源 | etcd 中出现了新的 ReplicaSet（`ADDED` watch event） | 创建 3 个 Pod 对象 |
+| 4 → 5 | Scheduler Watch `Pod` 资源（`spec.nodeName == ""`） | etcd 中出现了 3 个未绑定的 Pod（`ADDED` watch event） | 绑定 Pod 到节点 |
+| 5 → 6 | kubelet Watch `Pod` 资源（`spec.nodeName == "<本节点名>"`） | Pod 的 `spec.nodeName` 被设置为该节点（`MODIFIED` watch event） | 创建容器 |
+| 6 → 7 | kubelet 自身的同步循环 | 容器创建完成，Readiness Probe 通过 | 上报 Pod Ready 状态 |
+| 7 → 8 | Endpoints Controller Watch `Pod` + `Service` 资源 | Pod 的 `.status.conditions[Ready]` 变为 `True`（`MODIFIED` watch event） | 更新 Endpoints |
+| 8 → 9 | kube-proxy Watch `Endpoints` + `Service` 资源 | Endpoints 列表新增 Pod IP（`MODIFIED` watch event） | 更新 iptables 规则 |
+
+**对应的 `kubectl get events` 能看到的事件记录（Event 资源）——以我们 smart-invest 项目为例：**
+
+```bash
+kubectl get events -n s<name-space> --sort-by='.lastTimestamp'
+```
+
+实际会看到类似这些 Event：
+
+```
+LAST SEEN   TYPE      REASON                    OBJECT                                 MESSAGE
+0s          Normal    Scheduled                 pod/user-service-7d5f8b9c-abc1         Successfully assigned smart-invest/user-service-7d5f8b9c-abc1 to node-2
+2s          Normal    SuccessfulCreate          replicaset/user-service-7d5f8b9c        Created pod: user-service-7d5f8b9c-abc1
+2s          Normal    ScalingReplicaSet         deployment/user-service                Scaled up replica set user-service-7d5f8b9c to 3
+3s          Normal    Pulling                   pod/user-service-7d5f8b9c-abc1         Pulling image "gongchengship/smart-invest-user-service:v1"
+8s          Normal    Pulled                    pod/user-service-7d5f8b9c-abc1         Successfully pulled image "gongchengship/smart-invest-user-service:v1"
+9s          Normal    Created                   pod/user-service-7d5f8b9c-abc1         Created container user-service
+10s         Normal    Started                   pod/user-service-7d5f8b9c-abc1         Started container user-service
+35s         Normal    Ready                     pod/user-service-7d5f8b9c-abc1         Pod is Ready
+```
+
+**这些 Event 的发出者（Source Component）对照：**
+
+| Event Reason | 谁发出的 | 对应流程步骤 |
+|-------------|---------|-------------|
+| `ScalingReplicaSet` | Deployment Controller | 步骤 3 |
+| `SuccessfulCreate` | ReplicaSet Controller | 步骤 4 |
+| `Scheduled` | Scheduler | 步骤 5 |
+| `Pulling` / `Pulled` | kubelet | 步骤 6 |
+| `Created` / `Started` | kubelet | 步骤 6 |
+| `Ready` | kubelet（通过 Node Controller） | 步骤 7 |
+
+**面试考点——Event 机制的两个关键设计：**
+
+1. **List-Watch 不是轮询。** Controller 先 `List` 全量获取当前状态，再用 `Watch` 长连接（HTTP Chunked / gRPC streaming）接收增量变更。如果 Watch 断开，重新 List + Watch，保证不丢事件。这不是每 5 秒轮询一次——是实时推送。
+
+2. **Watch Event 携带资源版本号（resourceVersion）。** etcd 中每个对象的每次变更都会递增 `resourceVersion`。Controller 的 Watch 从这个版本号开始，保证**不会漏事件，也不会收到重复的中间状态**。
+
+**排查技巧——当 Pod 调度失败时看什么：**
+
+```bash
+# 最快：看 Pod 的 Events
+kubectl describe pod <pod-name> -n smart-invest | tail -20
+
+# 查看全命名空间的 Events
+kubectl get events -n smart-invest --sort-by='.lastTimestamp'
+
+# 如果 Pod 一直 Pending 且没有 Scheduled Event → Scheduler 出问题了
+# 如果有 Scheduled 但没有 Pulled → 镜像拉不下来或节点资源不够
+# 如果有 Created 但没有 Ready → Readiness Probe 失败
 ```
 
 ---

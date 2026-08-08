@@ -27,6 +27,7 @@
 | 十四 | SSH 深度配置 | ★★★★☆ |
 | 十五 | 防火墙（iptables / ufw） | ★★★☆☆ |
 | 十六 | DevOps 日常场景实战 | ★★★★★ |
+| **十七** | **Linux 命名约定与术语词源** | ★★★★☆ |
 
 ---
 
@@ -1026,6 +1027,356 @@ rsync -avz george@192.168.31.192:/var/log/k3s*.log ./logs/
 ssh -L 8081:localhost:8081 george@192.168.31.192
 # 然后访问 http://localhost:8081 就等于访问服务器的 localhost:8081
 ```
+
+---
+
+## 十七、Linux 命名约定与术语词源 / Naming Conventions & Etymology
+
+### 17.1 进程/服务名中的 `d` 后缀——Daemon（守护进程）
+
+**你问的 `systemd`、`containerd`、`dockerd` 中的 `d` 是什么？**
+
+> **答案：`d` = `daemon`（守护进程，发音 `/ˈdiːmən/` = 「迪蒙」）**
+
+**什么是 Daemon（守护进程）？**
+
+Daemon 是一种在**后台持续运行**的进程，不和终端交互，默默做它被安排的工作。类比 Java 中的 Daemon Thread（守护线程）——JVM 退了它就退，平时不被感知。
+
+```
+普通进程（Foreground Process）：
+  $ ./deploy.sh
+  Running...     ← 你盯着它，它跑完你就知道
+  Done.          ← 跑完了就消失
+
+守护进程（Daemon）：
+  $ systemctl start k3s
+  $               ← 命令立即返回，shell 还给你
+                  ← k3s 在后台默默运行，你完全感觉不到它的存在
+                  ← 但它确实在监听 6443 端口、调度 Pod、处理流量
+```
+
+**Daemon 的特征：**
+- 后台运行，不占用终端
+- 通常开机自启（`systemctl enable xxx`）
+- 名字通常以 `d` 结尾
+- PID 通常很小（启动早）
+
+**DevOps 工作中每天打交道的 Daemon：**
+
+| 进程名 | 全称 | 它是干什么的 |
+|--------|------|-------------|
+| **systemd** | **System** **D**aemon | Linux 的 PID 1——所有进程的祖先。负责启动和管理所有系统服务 |
+| **dockerd** | **Docker** **D**aemon | Docker 的后台服务。接收 docker CLI 的请求，管理镜像、容器、网络 |
+| **containerd** | **Container** **D**aemon | 容器运行时守护进程。dockerd 把「创建容器」的任务交给 containerd 执行 |
+| **kubelet** | **Kube** + **let**（小后缀，见 17.3） | 每个 K8s 节点上的代理——不是 Controller，而是执行者 |
+| **sshd** | **S**ecure **Sh**ell **D**aemon | SSH 服务端。监听 22 端口，接受你的 `ssh` 连接 |
+| **crond** | **Cron** **D**aemon | 定时任务服务。到了你设的时间就执行你指定的命令 |
+| **journald** | **Journal** **D**aemon | systemd 的日志组件。收集所有服务的 stdout/stderr |
+| **rsyslogd** | **R**eliable **Syslog** **D**aemon | 传统系统日志守护进程。把日志写到 `/var/log/` |
+| **ntpd** | **N**etwork **T**ime **P**rotocol **D**aemon | 时间同步守护进程。保证服务器时间是准的 |
+| **httpd** | **H**yper**t**ext **T**ransfer **P**rotocol **D**aemon | Apache HTTP Server 的守护进程名 |
+| **mysqld** | **MySQL** **D**aemon | MySQL 数据库的守护进程 |
+
+**查看你服务器上的所有 daemon：**
+
+```bash
+# 看所有带 d 后缀的服务进程
+ps aux | grep 'd$' | head -20
+# 或者
+ps -eo pid,cmd | grep -E '(d$|d )' | head -20
+
+# 看 systemd 管理的所有 daemon 服务
+systemctl list-units --type=service | grep 'd\.service'
+
+# 在你的 K3S 服务器上跑：
+ssh george@192.168.31.192 'ps aux | grep -E "(dockerd|containerd|k3s|systemd|sshd)" | grep -v grep'
+```
+
+---
+
+### 17.2 `systemd` 这个名字的含义
+
+```
+systemd 的名字很简单：
+
+  system  +  d
+    ↑         ↑
+  系统       daemon = 守护进程（Unix 命名惯例，见 17.1）
+
+  → "系统守护进程"
+```
+
+**没有彩蛋，没有双关。** Wikipedia 对 systemd 名字的记载是：
+
+> *"The name systemd adheres to the Unix convention of making daemons easier to distinguish by having the letter 'd' as the last one in their actual filenames."*
+>
+> —— "systemd 这个名字遵循 Unix 惯例：守护进程的文件名以 `d` 结尾，以便于区分。"
+
+**但是 systemd 确实替代了 System V init：**
+
+这不是名字里的彩蛋，而是历史事实——systemd 是 System V init 的继任者。System V init（发音 "system five"）是 AT&T Unix System V 时代定义的传统 init 系统，用 `/etc/init.d/` 下的 shell 脚本管理服务启动。systemd 取代了它，但**名字本身并无关联。**
+
+```
+System V init（旧）           →    systemd（新）
+├── /etc/init.d/ shell 脚本    →    ├── systemd unit 文件（声明式）
+├── runlevel 0-6              →    ├── target（graphical.target 等）
+├── 串行启动                   →    ├── 并行启动（快得多）
+└── 只管启动，不管运行          →    └── 管启动 + 运行 + 日志 + 资源限制
+```
+
+**在 Linux 上亲手验证：**
+
+```bash
+# 老一代 init（System V）——大多数发行版已改为兼容 systemd 的 symlink
+ls -l /sbin/init
+# → /sbin/init -> /lib/systemd/systemd    ← 看！init 现在指向 systemd
+
+# systemd 确实接管了 PID 1
+ps -p 1 -o comm=                          # PID 1 是什么？→ systemd
+
+# 老的运行级别（runlevel）在 systemd 中变成了 target
+systemctl get-default                     # 当前默认的 target
+systemctl list-units --type=target | grep runlevel
+```
+
+---
+
+### 17.3 `kubelet` 中的 `-let` 后缀——"小代理"
+
+`-let` 是英语中表示「小」的后缀（和 booklet、piglet、applet 一样）：
+
+| 词根 | 含义 | +let | 含义 |
+|------|------|------|------|
+| pig | 猪 | pig**let** | 小猪 |
+| book | 书 | book**let** | 小册子 |
+| app | 应用 | app**let** | 小程序（Java Applet） |
+| kube | K8s | kube**let** | K8s 在节点上的**小代理**——不是大脑，只是手脚 |
+
+**kubelet 不是 Controller，它是 K8s 在每台机器上的执行者。** Controller 在大脑（control plane）里做决策，kubelet 在手脚（worker node）上执行。
+
+---
+
+### 17.4 `*/bin` `/sbin` `/usr/bin` `/usr/sbin` 中的目录名来源
+
+| 目录 | 全称 | 里面的文件是 |
+|------|------|-------------|
+| `/bin` | **bin**aries（二进制文件） | 所有用户都能用的基础命令（`ls`, `cat`, `cp`） |
+| `/sbin` | **s**ystem **bin**aries | 只有 root 才能用的系统管理命令（`fdisk`, `iptables`, `mkfs`） |
+| `/usr/bin` | **U**nix **S**ystem **R**esources **bin**aries | 发行版安装的用户级可执行文件（`java`, `docker`, `kubectl`） |
+| `/usr/sbin` | **usr** **s**ystem **bin**aries | 发行版安装的系统管理可执行文件 |
+| `/usr/local/bin` | **local** 手动编译安装的 | 你自己装的软件（`helm`, `k3s`） |
+| `/opt` | **opt**ional（可选的） | 大型第三方软件（`/opt/smart-invest/`） |
+
+---
+
+### 17.5 `etc` — 到底是什么意思？
+
+`/etc` 目录名的来源有好几种说法，但最靠谱的是：
+
+> **et cetera**（拉丁语「以及其他」/「等等」）——早期 Unix 开发者把「不知道放哪」的配置文件都扔进了 `/etc/`。
+
+现在 `/etc` = **配置文件大全**。面试可能问到：
+
+```bash
+ls /etc  | head -20
+# 你能看到几乎所有系统配置：
+# /etc/hostname  — 主机名
+# /etc/hosts     — 本地 DNS
+# /etc/passwd    — 用户信息
+# /etc/shadow    — 密码 hash
+# /etc/fstab     — 开机自动挂载（FS TABle）
+# /etc/ssh/      — SSH 配置
+# /etc/systemd/  — systemd 服务配置
+# /etc/apt/      — apt 软件源
+```
+
+---
+
+### 17.6 `/proc` 和 `/sys` — 两个「假的」文件系统
+
+| 目录 | 全称 | 本质 |
+|------|------|------|
+| `/proc` | **proc**ess（进程） | **伪文件系统**——只存在内存中，不占磁盘。内核通过它暴露进程和系统信息 |
+| `/sys` | **sys**tem filesystem | **伪文件系统**——只存在内存中。比 `/proc` 更结构化，专门暴露内核和硬件信息 |
+
+```bash
+# 验证它们是「假的」
+ls -l /proc/kcore        # 显示文件大小可能有 128TB（物理没那么多内存！）
+                          # 因为它的内容由内核动态生成，不是真的存在磁盘上
+
+# /proc 是只存在于内存的虚拟文件系统
+df -h /proc
+# Filesystem      Size  Used Avail Use% Mounted on
+# proc               0     0     0    - /proc    ← Size=0！因为它不占磁盘
+```
+
+---
+
+### 17.7 管道与重定向符号词源
+
+| 符号 | 名字 | 含义来源 |
+|------|------|----------|
+| `|` | pipe（管道） | 来自流体力学——像水管一样，把左边命令的输出「引流」到右边命令 |
+| `>` | redirect（覆盖） | 箭头方向 = 数据流向 |
+| `>>` | redirect append（追加） | 两个箭头 = 追加不覆盖 |
+| `2>&1` | stderr→stdout | `2` = stderr 的文件描述符编号，`1` = stdout 的编号 |
+| `/dev/null` | null device | null = 「空」——写什么都消失，读什么都返回空 |
+
+---
+
+### 17.8 `rc` 后缀——例如 `.bashrc`、`/etc/rc.local`
+
+**`rc` = `run commands`（运行命令）** 或 **`run control`（运行控制）**，来自早期 Unix 的 CTSS 操作系统传统。
+
+| 文件 | 全称 | 作用 |
+|------|------|------|
+| `.bashrc` | Bash **R**un **C**ommands | 每个新 bash 窗口启动时自动执行的脚本 |
+| `.vimrc` | Vim **R**un **C**ommands | Vim 启动时自动执行的配置 |
+| `/etc/rc.local` | **R**un **C**ommands **Local** | 开机自启脚本（systemd 时代前的方法） |
+| `init.rc` | **I**nit **R**un **C**ommands | init 进程的配置（Android 也有 `init.rc`） |
+
+---
+
+### 17.9 `sh` 后缀——Shell 脚本的扩展名
+
+**`.sh` = Unix **Sh**ell。**
+
+Shell 本身的含义是「壳」——相对于 Kernel（内核/核）。
+
+```
+Hardware → Kernel（内核/果仁） → Shell（外壳/命令行接口） → 用户
+                                  ↑
+                             包裹在内核外面的「壳」
+                             用户通过 Shell 和 Kernel 交互
+```
+
+| 名字 | 含义 |
+|------|------|
+| **bash** | **B**ourne-**A**gain **Sh**ell——Bourne Shell（sh）的增强版。双关 "born again"（重生） |
+| **zsh** | **Z** **Sh**ell——bash 的另一种增强版（macOS 默认 shell） |
+| **sh** | Unix 上最原始的 **Sh**ell（Bourne Shell） |
+| **ksh** | **K**orn **Sh**ell（David Korn 写的） |
+
+---
+
+### 17.10 DevOps 工具名缩写盘点
+
+| 名字 | 全称 | 含义 |
+|------|------|------|
+| **K8s** | Kubernete**s** — 8 个字母省略 | K 和 s 之间省了 8 个字母 `ubernete` |
+| **K3s** | K8s 砍一半 | 轻量级 K8s，把「8」换成「3」表示更小 |
+| **etcd** | `/etc` distributed | Linux `/etc` 目录（配置）的分布式版本 |
+| **apt** | **A**dvanced **P**ackage **T**ool | Debian 的高级包管理工具 |
+| **yum** | **Y**ellowdog **U**pdater **M**odified | 最早为 Yellow Dog Linux 写的 |
+| **LAMP** | **L**inux + **A**pache + **M**ySQL + **P**HP | 经典的 Web 应用技术栈缩写 |
+| **MEAN** | **M**ongoDB + **E**xpress + **A**ngular + **N**ode.js | JavaScript 全栈缩写 |
+| **SSH** | **S**ecure **Sh**ell | 加密的远程 Shell |
+| **SSL** | **S**ecure **S**ockets **L**ayer | 已废弃（现在用 TLS），但名字还在用 |
+| **TLS** | **T**ransport **L**ayer **S**ecurity | SSL 的继任者 |
+| **HTTPS** | **H**yper**t**ext **T**ransfer **P**rotocol **S**ecure | HTTP + SSL/TLS |
+| **API** | **A**pplication **P**rogramming **I**nterface | 两个系统之间的通信约定 |
+| **POSIX** | **P**ortable **O**perating **S**ystem **I**nterface + **X**（Unix） | Unix 兼容标准——让不同 Unix 之间的代码可移植 |
+| **GNU** | **G**NU's **N**ot **U**nix（递归缩写） | Richard Stallman 的自由软件项目。`ls`、`gcc` 都是 GNU 写的 |
+| **WSL** | **W**indows **S**ubsystem for **L**inux | 在 Windows 里跑 Linux |
+| **LTS** | **L**ong **T**erm **S**upport | 长期支持版本（Ubuntu LTS 有 5 年安全更新） |
+| **lint** | 源自 Unix 的 **lint** 命令（见下方详解） | 静态代码检查工具，如 `helm lint`、`eslint`、`mvn checkstyle` |
+
+**`lint` 的典故——「从毛衣上去掉小软毛」：**
+
+`lint` 本来是一个 Unix 命令，由 Stephen C. Johnson 在 1979 年随 Unix V7 发布。现在泛指「静态检查」这一类工具。
+
+根据权威的 **Jargon File**（黑客文化词典，由 Eric S. Raymond 等人维护）的记载：
+
+> *"[lint is] named for the bits of fluff it supposedly picks from programs."*
+>
+> —— lint 得名于「它能从程序里挑出的小软毛/绒屑」
+
+```
+lint 的原义 = 织物表面沾的「小软毛 / 绒屑 / 线絮」
+
+打个比方：你的黑裤子穿了几天会沾上白色的衣毛——那就是 lint。
+在家用「粘毛器」来滚筒粘走它们，这个过程其实跟程序代码检查很像：
+  → 代码里那些声明了却不用的变量、隐式类型转换、函数签名不匹配……
+  → 它们不是编译器级别的「硬错误」（语法错误、链接错误），
+     但累积起来会让程序「不干净」——就像 lint 在衣上积灰。
+  → lint 这个工具就是「代码粘毛器」，把这些小毛刺一卷了之。
+```
+
+**源文献验证（可直接引用来面试）：**
+
+| 源 | 内容 |
+|----|------|
+| **Jargon File (catb.org)** | "lint — named for the bits of fluff it supposedly picks from programs" |
+| **Stephen C. Johnson, Bell Labs** | 1979 年在 Unix V7 中发布了 `lint(1)`，这是 C 语言静态分析工具的原型 |
+| **FOLDOC (Free On-Line Dictionary of Computing)** | 同一定义 |
+
+**今天你在 DevOps 工作中用到的 `lint` 后代：**
+
+| 命令 | 全称/来源 | 检查什么 |
+|------|-----------|----------|
+| `helm lint` | Helm Lint | 检查 Helm Chart 的 YAML 语法和规范 |
+| `hadolint` | Haskell Dockerfile Linter | 检查 Dockerfile 的坏习惯（如用 `latest` 标签、不以非 root 用户运行） |
+| `eslint` | ECMAScript Linter | 检查 JavaScript/TypeScript 代码质量 |
+| `shellcheck` | Shell Check | 检查 shell 脚本的常见错误（如忘记引号、`$?` 误用） |
+| `terraform validate` | Terraform Validate | 检查 .tf 文件语法（Terraform 生态中的 lint） |
+
+```bash
+# 在你的 smart-invest 项目里跑一下 helm lint
+cd infrastructure/helm-charts/umbrella
+helm lint .
+# 输出：
+# ==> Linting .
+# 1 chart(s) linted, 0 chart(s) failed
+```
+
+---
+
+### 17.11 来自希腊神话的可观测性工具命名
+
+| 工具 | 名字来源 | 含义 |
+|------|----------|------|
+| **Prometheus** | 普罗米修斯——希腊神话中盗火给人类的神 | 寓意「照亮黑暗」——Prometheus 把监控数据从黑箱中提取出来 |
+| **Grafana** | Graph + -ana（后缀，表示关联） | 「图表相关的东西」 |
+| **Jaeger** | 德语 Jäger = **H**unter（猎人） | 追猎分布式请求的调用链路 |
+| **Istio** | 希腊语 ἰστίον = **sail**（帆） | 让微服务在网络之海中有方向地航行 |
+| **Kiali** | 夏威夷语 = 晶莹/闪亮 | Istio 的可视化面板，「让服务网格变得清晰透明」 |
+
+---
+
+### 17.12 有趣的技术递归缩写
+
+递归缩写是黑客文化的产物——名字本身就包含自己：
+
+| 缩写 | 展开 |
+|------|------|
+| **GNU** | **G**NU's **N**ot **U**nix |
+| **WINE** | **W**INE **I**s **N**ot an **E**mulator |
+| **PHP** | **P**HP: **H**ypertext **P**reprocessor（最早叫 Personal Home Page） |
+| **YAML** | **Y**AML **A**in't **M**arkup **L**anguage |
+| **cURL** | **C**lient for **URL**s（最早叫 "see URL"，后来改名） |
+| **npm** | **N**ode **P**ackage **M**anager（注意——官方说这不是递归缩写，但大家都这么说） |
+
+---
+
+### 17.13 一个带你穿越时间线的冷知识：为什么 `Ctrl+C` 是中断？
+
+```
+早年电传打字机（Teletype）时代：
+  - Ctrl 键的作用是把字符的 ASCII 码的第 7 位和第 6 位清零
+  - C 的 ASCII 码是 0x43（1000011）
+  - Ctrl+C → 输出 0x03
+  - 0x03 = ETX（End of Text，文本结束）字符
+  - Unix 把这个解释为「中断当前进程」
+
+同理：
+  Ctrl+D → 0x04 = EOT（End of Transmission）= 「EOF / 退出」
+  Ctrl+Z → 0x1A = SUB（Substitute）= 「暂停进程」
+  Ctrl+\ → 0x1C = FS（File Separator）= 「SIGQUIT / 退出并 core dump」
+```
+
+---
+
+> **这一章的要点：Linux/Unix 世界的命名不是随机的。每个名字都有一段历史和逻辑。当你理解了 `d` = daemon、`rc` = run commands、`/proc` = process pseudo-filesystem 时，你就不是「会敲命令」，而是「理解系统」。面试官能从你对这些术语的理解中看出你是不是真正在 Linux 环境里工作过。**
 
 ---
 

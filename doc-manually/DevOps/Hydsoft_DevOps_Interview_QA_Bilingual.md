@@ -1295,6 +1295,1360 @@ Git as single source of truth for declarative infra + apps. Push mode (my projec
 
 ---
 
+### Q28: K8s 中如何安全地存储数据库密码？AWS 中如何安全地存储数据库密码？
+
+**答案：**
+
+这是一个**多层纵深防御**的问题。密码安全不是靠一个工具，而是靠一套递进的方案。
+
+---
+
+#### 方案一：K8s 原生 Secret（基础方案，你的项目在用）
+
+**原理：** K8s 将密码以 base64 编码存入 Secret 对象，通过环境变量或 Volume 注入 Pod。
+
+```yaml
+# =============================================================================
+# 1. 创建 Secret（你的 smart-invest-secrets）
+# =============================================================================
+# Secret 数据字段的值必须是 base64 编码的
+# echo -n 'P@ssw0rd123!' | base64  →  UEBzc3cwcmQxMjMh
+# echo -n 'my-jwt-secret-key...' | base64  →  bXktand0LXNlY3JldC1rZXkuLi4=
+apiVersion: v1
+kind: Secret
+metadata:
+  name: smart-invest-secrets
+  namespace: smart-invest
+type: Opaque                       # Opaque = 通用 key-value secret
+data:
+  SPRING_DATASOURCE_PASSWORD: UEBzc3cwcmQxMjMh     # ← base64 编码后的值，不是明文！
+  JWT_SECRET: bXktand0LXNlY3JldC1rZXkuLi4=
+---
+# =============================================================================
+# 2. Deployment 引用 Secret（两种方式任选或组合）
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+spec:
+  template:
+    spec:
+      containers:
+      - name: user-service
+        image: gongchengship/smart-invest-user-service:v1
+
+        # 方式 A：以环境变量注入（你的项目用的方式）
+        # 优点：Spring Boot 可以直接用 ${SPRING_DATASOURCE_PASSWORD}
+        # 缺点：环境变量对所有能 exec 进容器或看 /proc/<pid>/environ 的人可见
+        env:
+        - name: SPRING_DATASOURCE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: smart-invest-secrets      # 引用上面创建的 Secret 的名字
+              key: SPRING_DATASOURCE_PASSWORD # 引用 Secret 中的哪个 key
+
+        # 方式 B：以文件 Volume 挂载（更安全）
+        # 优点：内容只存在于内存（tmpfs），不写入容器文件系统
+        #       应用可以在运行时读取文件内容
+        # 缺点：应用代码需要适配文件读取路径
+        volumeMounts:
+        - name: db-secret
+          mountPath: /etc/secrets/db          # 挂载到这个路径
+          readOnly: true                      # 只读挂载
+
+      volumes:
+      - name: db-secret
+        secret:
+          secretName: smart-invest-secrets
+          # 文件权限：只允许 owner 读写（最严格）
+          defaultMode: 0400                  # r-------- （八进制 400）
+```
+
+**K8s Secret 的局限性（面试加分项——展示你知道 base64 不是加密）：**
+
+| 局限 | 说明 |
+|------|------|
+| **base64 不是加密** | `echo "UEBzc3cwcmQxMjMh" | base64 -d` → 一秒还原明文。任何人都能解码 |
+| **etcd 中默认明文存储** | Secret 存入 etcd 时不加密，有 etcd 访问权 = 能看到所有密码 |
+| **RBAC 权限可能过宽** | 能 `kubectl get secret` 的人就能拿密码 |
+| **Git 中不能存 Secret YAML** | 明文放到 Git 上是安全灾难！ |
+
+---
+
+#### 方案二：K8s Secret + Encryption at Rest（etcd 存储加密）
+
+**原理：** 用 EncryptionConfiguration 让 apiserver 在写入 etcd 前对 Secret 做 AES 加密。这样即使有人拿到了 etcd 的数据文件，也是密文。
+
+```yaml
+# /etc/kubernetes/encryption-config.yaml —— 这是 apiserver 的配置
+apiVersion: apiserver.config.k8s.io/v1
+kind: EncryptionConfiguration
+resources:
+  - resources:
+    - secrets              # 只加密 Secret 资源（最佳实践——按需加密，不影响性能）
+    providers:
+    - aescbc:              # 使用 AES-CBC 加密算法
+        keys:
+        - name: key1
+          secret: <base64-encoded-32-byte-random-key>
+    - identity: {}         # 兜底：如果上面的 key 丢了，至少还能读到旧未加密数据
+```
+
+```bash
+# 检查 etcd 加密是否生效
+# 加密前：直接 grep etcd 数据文件能看到明文
+sudo ETCDCTL_API=3 etcdctl get /registry/secrets/smart-invest/smart-invest-secrets
+# 加密后：返回的是乱码（AES 加密后的密文）
+```
+
+**面试要点：** 面试官问「etcd 里的 Secret 是加密的吗？」→ 默认不是！需要显式配置 EncryptionConfiguration。
+
+---
+
+#### 方案三：SealedSecret（安全存入 Git 的 K8s Secret）
+
+**原理：** SealedSecret 是 Bitnami 开源的工具。你用集群的公钥加密 Secret → 产生一个 **密文的 SealedSecret YAML** → 这个密文可以安全放进 Git → 推到集群后，SealedSecret Controller 自动解密并生成真正的 Secret。
+
+```bash
+# 1. 安装 SealedSecret Controller（集群只需装一次）
+kubectl apply -f https://github.com/bitnami-labs/sealed-secrets/releases/latest/download/controller.yaml
+
+# 2. 本地用 kubeseal CLI 加密
+kubectl create secret generic db-password \
+  --from-literal=SPRING_DATASOURCE_PASSWORD='P@ssw0rd123!' \
+  --dry-run=client -o yaml | \
+  kubeseal --format yaml > sealed-db-password.yaml
+
+# 3. sealed-db-password.yaml 是密文，可以安全提交到 Git
+cat sealed-db-password.yaml
+```
+
+```yaml
+# sealed-db-password.yaml —— 这个文件可以安全地放进 Git！
+# 它是用集群的公钥加密的，只有集群内的 SealedSecret Controller 能解密
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: db-password                     # 解密后会生成同名 Secret
+  namespace: smart-invest
+spec:
+  encryptedData:
+    # 下面这些是 RSA 加密后的密文！没有人能反推明文
+    SPRING_DATASOURCE_PASSWORD: AgB4xK8mF3pQ...（几百个字符的密文）
+```
+
+```bash
+# 4. 部署到集群
+kubectl apply -f sealed-db-password.yaml
+
+# 5. SealedSecret Controller 自动：
+#    → 用它的私钥解密密文
+#    → 生成真正的 K8s Secret（name: db-password）
+#    → Pod 正常通过 secretKeyRef 引用，毫无感知
+
+kubectl get secret db-password -n smart-invest
+# NAME          TYPE     DATA   AGE
+# db-password   Opaque   1      10s
+```
+
+**面试要点：** 「你的 Helm chart 里 Secret 的明文密码怎么存到 Git？」→ 不能用明文！用 SealedSecret 加密后再入库。
+
+---
+
+#### 方案四：ExternalSecret（从外部密钥管理器同步到 K8s——你朋友 SAP 项目用的方式）
+
+**原理：** K8s 里不存密码的明文。密码存在 AWS Secrets Manager / HashiCorp Vault 里，ExternalSecret Operator 定期（或事件触发）把外部密码同步为 K8s Secret。
+
+```yaml
+# =============================================================================
+# Step 1: 在 AWS Secrets Manager 中创建密码（通过 AWS Console 或 CLI）
+# =============================================================================
+# aws secretsmanager create-secret \
+#   --name /smart-invest/prod/database-password \
+#   --secret-string '{"SPRING_DATASOURCE_PASSWORD":"P@ssw0rd123!","DB_USERNAME":"smartadmin"}'
+#   --region ap-southeast-1
+#
+# AWS Secrets Manager 自动加密存储 + 自动轮转 + 审计日志
+
+# =============================================================================
+# Step 2: ExternalSecret CRD——声明「我要同步哪个外部密钥」
+# =============================================================================
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: db-password-ext
+  namespace: smart-invest
+spec:
+  # 同步间隔：每 1 小时从 AWS Secrets Manager 拉一次最新密码
+  refreshInterval: 1h
+
+  # 引用 AWS Secrets Manager 中的密钥
+  secretStoreRef:
+    name: aws-secretsmanager        # ← 集群级别的 SecretStore
+    kind: SecretStore               # SecretStore = 集群级 / ClusterSecretStore = 全局
+
+  # 目标：在 K8s 中创建名为 db-password 的 Secret
+  target:
+    name: db-password               # 生成的 K8s Secret 名字
+    creationPolicy: Owner           # ExternalSecret 拥有这个 K8s Secret 的生命周期
+
+  # 映射关系：AWS Secrets Manager 的 key → K8s Secret 的 key
+  data:
+  - secretKey: SPRING_DATASOURCE_PASSWORD         # K8s Secret 中的 key 名
+    remoteRef:
+      key: /smart-invest/prod/database-password   # AWS Secrets Manager 中的 ARN 后缀
+      property: SPRING_DATASOURCE_PASSWORD        # JSON 中的哪个字段
+---
+# =============================================================================
+# Step 3: SecretStore——ExternalSecret 的「连接配置」
+# =============================================================================
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: aws-secretsmanager
+  namespace: smart-invest
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: ap-southeast-1
+      auth:
+        # 使用 IRSA（IAM Roles for Service Accounts）——AWS 最佳实践
+        # Pod 通过其 ServiceAccount 自动获得访问 AWS Secrets Manager 的权限
+        # 不需要在 K8s 中存 AWS Access Key/Secret Key！
+        jwt:
+          serviceAccountRef:
+            name: external-secrets-sa
+```
+
+**面试要点：** 你朋友 SAP 项目里用 Vault 也是同样的思路——密码存在 Vault 里，K8s 里通过 ExternalSecret 或 Vault Sidecar Injector 同步。进入一个新 region 只需加 Vault path 映射。
+
+---
+
+#### 方案五：Vault Sidecar Injector（运行时注入，密码不落 K8s 磁盘）
+
+**原理：** 不需要 ExternalSecret 预先同步成 K8s Secret。密码在 Pod 启动时由 Vault Agent Sidecar 注入到容器的内存文件系统中，Pod 删除后密码消失，K8s etcd 中不存在任何密码痕迹。
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: user-service
+  annotations:
+    # 启用 Vault Agent 注入——Istio sidecar 也是通过 annotation 注入的！
+    vault.hashicorp.com/agent-inject: "true"
+    # Vault 角色（对应 Vault 中的 K8s Auth Role）
+    vault.hashicorp.com/role: "smart-invest-user-service"
+    # 从 Vault path "database/creds/user-service" 拉取密码
+    # 注入到容器内文件 /vault/secrets/db-creds
+    vault.hashicorp.com/agent-inject-secret-db-creds: "database/creds/user-service"
+    # 自定义模板——把 Vault 返回的 JSON 渲染成 Spring Boot 需要的 application.properties 格式
+    vault.hashicorp.com/agent-inject-template-db-creds: |
+      {{- with secret "database/creds/user-service" }}
+      spring.datasource.username={{ .Data.data.username }}
+      spring.datasource.password={{ .Data.data.password }}
+      {{- end }}
+spec:
+  containers:
+  - name: user-service
+    image: gongchengship/smart-invest-user-service:v1
+    # 容器中的 Spring Boot 读取 /vault/secrets/db-creds 文件
+    # 这个文件由 Vault Agent Sidecar 在 Pod 启动时创建，内容是动态生成的
+    # Pod 删除后文件消失，密码从未来过 K8s 的 etcd
+```
+
+---
+
+#### AWS 中安全存储密码的完整方案
+
+| 服务 | 全称 | 用途 | 什么时候用 |
+|------|------|------|-----------|
+| **AWS Secrets Manager** | — | 托管密钥存储 + **自动轮转** | 数据库密码、API Key。支持自动轮转 RDS/Aurora 密码！ |
+| **AWS Parameter Store** | SSM Parameter Store | 简单 KV 配置存储 | 非敏感配置或简单的加密字符串。免费 tier 有 10000 个参数 |
+| **AWS KMS** | Key Management Service | 加密密钥管理 | 一切加密的基础——Secrets Manager/S3/EBS 都用它提供的密钥 |
+| **IRSA** | IAM Roles for Service Accounts | 让 K8s ServiceAccount 映射到 AWS IAM Role | Pod 访问 AWS 服务时的鉴权方式，不需要在 K8s 中存 AWS Access Key |
+
+```bash
+# Secrets Manager vs Parameter Store 的选择
+#
+# Secrets Manager（收费，但有高级功能）：
+#   - 自动密码轮转（RDS / Redshift / DocumentDB 原生支持）
+#   - 跨区域复制
+#   - CloudTrail 审计
+#
+# Parameter Store（免费 tier 很慷慨）：
+#   - SecureString 类型也有 KMS 加密
+#   - 但不能自动轮转
+#   - 适合：配置项 / 少量加密参数
+```
+
+**面试最佳回答套路（从低到高递进）：**
+
+> 「安全的密码存储是个纵深问题。最基础的是 K8s Secret + RBAC 权限控制。进一步需要给 etcd 开 Encryption at Rest 防止数据文件泄露。管理面用 SealedSecret 把密文安全存入 Git，或 ExternalSecret 从 AWS Secrets Manager 同步。在 SAP 项目中我们用 Vault——密码不在 K8s 中落盘，Pod 启动时由 Vault Agent Sidecar 注入内存文件系统。AWS 端所有密钥用 KMS 管理，Pod 通过 IRSA 鉴权获取密码，整个链路没有长期 AK/SK。」
+
+---
+
+### Q28: How to securely store database passwords in K8s? In AWS?
+
+**Answer — layered defense approach:**
+
+| Layer | K8s Solution | AWS Solution |
+|-------|-------------|-------------|
+| Base | K8s Secret + RBAC | AWS Secrets Manager / Parameter Store (SecureString) |
+| Encryption | etcd EncryptionConfiguration (AES-CBC) | AWS KMS (Key Management Service) — all secrets encrypted at rest |
+| Git Safety | SealedSecret (encrypted YAML safe for Git) | K8s ExternalSecret + AWS Secrets Manager (sync from external, no plaintext in Git ever) |
+| Runtime Injection | Vault Sidecar Injector (in-memory tmpfs, never touches etcd) | IRSA (IAM Roles for Service Accounts — Pods authenticate without long-lived AK/SK) |
+| Rotation | ExternalSecret refreshInterval + Vault dynamic secrets | AWS Secrets Manager auto-rotation for RDS/Aurora natively |
+
+```yaml
+# SealedSecret —— safe to commit to Git
+apiVersion: bitnami.com/v1alpha1
+kind: SealedSecret
+metadata:
+  name: db-password
+  namespace: smart-invest
+spec:
+  encryptedData:
+    SPRING_DATASOURCE_PASSWORD: AgB4xK8mF3pQ...  # RSA-encrypted, only cluster can decrypt
+```
+
+```yaml
+# ExternalSecret —— sync from AWS Secrets Manager into K8s
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: db-password-ext
+spec:
+  refreshInterval: 1h                        # Re-sync from AWS every hour
+  secretStoreRef:
+    name: aws-secretsmanager
+    kind: SecretStore
+  target:
+    name: db-password                        # Resulting K8s Secret name
+  data:
+  - secretKey: SPRING_DATASOURCE_PASSWORD
+    remoteRef:
+      key: /smart-invest/prod/database-password
+      property: SPRING_DATASOURCE_PASSWORD
+```
+
+**Interview answer pattern:** "It's defense in depth — K8s Secret is the base layer (not encryption per se), then etcd Encryption at Rest, SealedSecret for Git safety, ExternalSecret for external sync, and Vault Sidecar Injector for zero-disk footprint. On AWS side, KMS is the root of trust, and IRSA eliminates long-lived cloud credentials in K8s."
+
+---
+
+### Q29: K8s 领域的 Istio 是什么？给出使用 Istio 的实现代码示例，加上充分的注释。
+
+**答案：**
+
+**Istio**（希腊语「帆 / sail」）是一个 **Service Mesh（服务网格）**。它在每个 Pod 里注入一个 Envoy Sidecar 代理容器，通过 iptables 劫持所有进出流量，在不修改业务代码的前提下统一提供以下能力：
+
+| 能力 | 说明 | 不用 Istio 时的做法 |
+|------|------|-------------------|
+| **流量管理** | 金丝雀发布、A/B 测试、超时、重试、熔断 | 写 Spring Cloud Gateway / Resilience4j 代码 |
+| **安全** | 全网格 mTLS 加密 + 细粒度访问控制 | 每个服务自己配 SSL 证书 |
+| **可观测性** | 自动采集 Metrics / Tracing / Logging | 每个服务自己接 Prometheus / Jaeger SDK |
+
+---
+
+#### 完整实战示例：Smart-Invest 项目加 Istio 实现金丝雀发布 + 熔断 + mTLS
+
+**架构总览：**
+
+```
+                    ┌─────────────────────────────┐
+                    │   Istio Ingress Gateway      │
+                    │  （网格边界的"大门"）         │
+                    │   监听 80/443                 │
+                    └─────────────┬───────────────┘
+                                  │ 根据 VirtualService 路由
+                    ┌─────────────┼───────────────┐
+                    │             │               │
+                    ▼             ▼               ▼
+            ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+            │order-service │ │user-service  │ │fund-service  │
+            │┌────────────┐│ │┌────────────┐│ │┌────────────┐│
+            ││ Java App   ││ ││ Java App   ││ ││ Java App   ││
+            │└─────┬──────┘│ │└─────┬──────┘│ │└─────┬──────┘│
+            │┌─────┴──────┐│ │┌─────┴──────┐│ │┌─────┴──────┐│
+            ││Envoy Sdcar ││ ││Envoy Sdcar ││ ││Envoy Sdcar ││
+            │└────────────┘│ │└────────────┘│ │└────────────┘│
+            └──────────────┘ └──────────────┘ └──────────────┘
+              ▲ 自动 mTLS ────┘ ▲ 自动 mTLS ────┘
+```
+
+**第一步：安装 Istio 并开启 Sidecar 注入**
+
+```bash
+# 1. 安装 Istio（使用 minimal profile，适合 K3S 资源有限的环境）
+istioctl install --set profile=minimal -y
+
+# 2. 给 namespace 打 Label——此后这个 namespace 下所有新 Pod 自动注入 Envoy Sidecar
+kubectl label namespace smart-invest istio-injection=enabled
+
+# 3. 重新部署应用——新 Pod 自动变成 2 个容器（Java App + Envoy）
+helm upgrade --install smart-invest ./umbrella \
+  -n smart-invest --create-namespace --wait
+
+# 4. 验证注入成功
+kubectl get pods -n smart-invest
+# NAME                             READY   STATUS
+# user-service-7d4f8c9b6-xk2lm    2/2     Running    ← 2/2！多了 Envoy Sidecar
+# order-service-8e5f9d0c7-ym3kn   2/2     Running
+```
+
+**第二步：金丝雀发布——新版本 user-service:v2 先拿 5% 流量**
+
+```yaml
+# =============================================================================
+# 1. DestinationRule —— 定义服务的「子版本」和熔断策略
+# =============================================================================
+# 作用：把 user-service 的 Pod 按 label 分成 v1 和 v2 两个 subset
+#       v1 是当前稳定版本，v2 是你要灰度上线的新版本
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: user-service
+  namespace: smart-invest
+spec:
+  host: user-service                              # 目标 K8s Service 名
+  subsets:
+  # Subset v1：稳定版 Pod（label version=v1）
+  - name: v1
+    labels:
+      version: v1                                 # 匹配 Pod 的 version label
+  # Subset v2：新版 Pod（label version=v2）
+  - name: v2
+    labels:
+      version: v2
+
+  # ===== 全局流量策略 =====
+  trafficPolicy:
+    # 连接池限制 → 防止某个版本打爆后端资源
+    connectionPool:
+      tcp:
+        maxConnections: 100                       # 最大 TCP 连接数
+      http:
+        http1MaxPendingRequests: 10               # 排队的最大 HTTP/1.1 请求数
+        maxRequestsPerConnection: 5               # 每个连接最多处理 5 个请求（防连接泄漏）
+
+    # 负载均衡算法
+    loadBalancer:
+      simple: LEAST_CONN                          # 最少连接数（还有 ROUND_ROBIN / RANDOM）
+
+    # ===== 异常检测 = 熔断触发条件（Istio 版的 Circuit Breaker） =====
+    outlierDetection:
+      consecutive5xxErrors: 5                     # 连续 5 次 5xx 错误 → 触发熔断
+      interval: 30s                               # 每 30 秒评估一次
+      baseEjectionTime: 60s                       # 熔断持续时间：60 秒内不向该 Pod 发流量
+      maxEjectionPercent: 50                      # 最多熔断 50% 的 Pod（保护剩余 Pod 不被打爆）
+      minHealthPercent: 30                        # 如果健康 Pod < 30%，整个熔断逻辑暂停（避免全面崩溃）
+---
+# =============================================================================
+# 2. VirtualService —— 金丝雀流量分配规则（核心配置！）
+# =============================================================================
+# 作用：按条件把流量分发给 v1 或 v2
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: user-service
+  namespace: smart-invest
+spec:
+  hosts:
+  - user-service                                  # 拦截发往 user-service 的所有请求
+
+  http:
+  # ----- 规则 1：内测用户 Header 匹配 → 100% 走 v2 -----
+  # 适用于：QA/PM 想提前验证新版
+  - match:
+    - headers:
+        x-canary:                                 # 自定义 HTTP Header
+          exact: "enabled"                        # 请求带 x-canary: enabled → 走 v2
+    route:
+    - destination:
+        host: user-service
+        subset: v2                                # 全部发给新版本
+      weight: 100
+
+  # ----- 规则 2：默认流量 → 95% v1 + 5% v2（金丝雀）-----
+  - route:
+    # 95% 流量给稳定版
+    - destination:
+        host: user-service
+        subset: v1
+      weight: 95                                  # weight = 流量权重（不是百分比，是相对值）
+    # 5% 流量给新版本（金丝雀）
+    - destination:
+        host: user-service
+        subset: v2
+      weight: 5
+
+    # ===== 超时控制（Istio 替你做了 Resilience4j @TimeLimiter 的事） =====
+    timeout: 10s                                   # 请求超时 10 秒
+
+    # ===== 重试策略（Istio 替你做了 Resilience4j @Retry 的事） =====
+    retries:
+      attempts: 3                                  # 最多重试 3 次
+      perTryTimeout: 2s                            # 每次重试的超时时间
+      retryOn: 5xx,connect-failure,refused-stream  # 什么情况触发重试
+```
+
+**第三步：mTLS 全网格加密——零代码修改**
+
+```yaml
+# =============================================================================
+# 3. PeerAuthentication —— 全网格强制 mTLS 加密
+# =============================================================================
+# 作用：要求 smart-invest namespace 中所有服务间通信都必须双向 TLS
+#       你的 Java 代码继续用 http://user-service:8081 就好
+#       Istio 自动在传输层加密——应用完全无感
+apiVersion: security.istio.io/v1beta1
+kind: PeerAuthentication                        # Peer = 对等方（服务与服务之间）
+metadata:
+  name: smart-invest-mtls
+  namespace: smart-invest
+spec:
+  mtls:
+    mode: STRICT                                # STRICT = 只接受 mTLS 流量，拒绝任何明文 HTTP
+    # 还有一个值是 PERMISSIVE = 同时接受明文和加密（迁移期用）
+---
+# =============================================================================
+# 4. AuthorizationPolicy —— 细粒度访问控制（谁能调谁）
+# =============================================================================
+# 作用：基于 workload 身份做白名单/黑名单
+apiVersion: security.istio.io/v1beta1
+kind: AuthorizationPolicy
+metadata:
+  name: user-service-access
+  namespace: smart-invest
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: user-service       # 这条规则用于 user-service
+  action: ALLOW                                  # 白名单模式
+  rules:
+  # 允许来自 order-service 和 api-gateway 的 GET 请求
+  - from:
+    - source:
+        principals:
+        - "cluster.local/ns/smart-invest/sa/order-service"  # order-service 的 ServiceAccount
+        - "cluster.local/ns/smart-invest/sa/api-gateway"     # api-gateway 的 ServiceAccount
+    to:
+    - operation:
+        methods: ["GET"]                                  # 只允许 GET
+        paths: ["/api/users/*"]                           # 只允许这个路径
+  # 允许来自 notification-worker 的 POST 请求
+  - from:
+    - source:
+        principals:
+        - "cluster.local/ns/smart-invest/sa/notification-worker"
+    to:
+    - operation:
+        methods: ["POST"]
+        paths: ["/api/notifications/*"]
+```
+
+**第四步：在 CI/CD Pipeline 中动态调整金丝雀比例（Jenkins Groovy）**
+
+```groovy
+// =============================================================================
+// Jenkins Pipeline 中的金丝雀推进脚本 / Canary Progression Script
+// =============================================================================
+// 这个 Groovy 脚本在你的 Jenkins Pipeline 中被调用
+// 它逐步增大新版本的流量比例，每步都检查监控指标
+
+def canaryProgression(String serviceName, String namespace) {
+    def checkIntervalSeconds = 300               // 每 5 分钟检查一次（让新版本充分被观察）
+    def stages = [5, 25, 50, 100]               // 金丝雀阶段：5% → 25% → 50% → 100%
+
+    for (int weight in stages) {
+        echo ">>> 金丝雀推进: ${serviceName} v2 流量 → ${weight}%"
+
+        // kubectl patch —— 动态修改 VirtualService 的 weight，无需重新部署
+        // 原理：kubectl patch 发 HTTP PATCH 给 apiserver → Istio Pilot 检测到变更 →
+        //       通过 xDS 协议推送给所有 Envoy Sidecar → Sidecar 立即生效
+        sh """
+            kubectl patch virtualservice ${serviceName} -n ${namespace} \
+              --type='json' \
+              -p='[{
+                "op": "replace",
+                "path": "/spec/http/1/route/0/weight",   # v1 的 weight
+                "value": ${100 - weight}
+              }, {
+                "op": "replace",
+                "path": "/spec/http/1/route/1/weight",   # v2 的 weight
+                "value": ${weight}
+              }]'
+        """
+
+        // 等待并观察指标
+        sleep(checkIntervalSeconds)
+
+        // 调用监控 API 检查新版本的健康状况
+        def errorRate = sh(
+            script: """
+                curl -s 'http://prometheus:9090/api/v1/query?query=' \\
+                  --data-urlencode 'query=sum(rate(istio_requests_total{reporter="source",destination_service_name="${serviceName}",destination_version="v2",response_code!~"2.."}[5m])) / sum(rate(istio_requests_total{reporter="source",destination_service_name="${serviceName}",destination_version="v2"}[5m]))' \\
+                | jq '.data.result[0].value[1] | tonumber'
+            """,
+            returnStdout: true
+        ).trim() as double
+
+        if (errorRate > 0.01) {                  // 错误率 > 1% → 自动回滚！
+            echo "!!! 错误率过高: ${errorRate} → 自动回滚"
+            // 把 v2 的 weight 直接置 0（全部流量回 v1）
+            sh """
+                kubectl patch virtualservice ${serviceName} -n ${namespace} \
+                  --type='json' \
+                  -p='[{"op":"replace","path":"/spec/http/1/route/0/weight","value":100},
+                      {"op":"replace","path":"/spec/http/1/route/1/weight","value":0}]'
+            """
+            error("金丝雀发布失败，已自动回滚")
+        }
+
+        echo ">>> 阶段 ${weight}% 通过，错误率: ${errorRate}"
+    }
+
+    echo ">>> 金丝雀发布完成！v2 现已承载 100% 流量"
+}
+```
+
+**第五步：可观测性——零代码获得的"免费午餐"**
+
+```yaml
+# =============================================================================
+# 5. 安装 Kiali + Jaeger + Grafana（Istio 配套可视化工具）
+# =============================================================================
+# 安装后你立刻获得：
+#   - Kiali: 服务拓扑图（哪个服务调了哪个，流量大小，延迟颜色）
+#   - Jaeger: 分布式 Trace（一次请求横跨 order→fund→user 的完整链路）
+#   - Grafana: 预置的 Istio 监控面板
+
+# Kiali dashboard
+# 地址：istioctl dashboard kiali
+# 你能看到：
+#   order-service ──(15.3 req/s, P99=120ms)──→ user-service(v1) 95%
+#                                            └─ user-service(v2)  5%
+# 如果 v2 的延迟/错误率高，Kiali 上 v2 节点会变红色！
+```
+
+---
+
+#### 面试最佳回答思路
+
+> 「Istio 是一个 Service Mesh。它的核心思想是通过 sidecar 模式把流量治理、安全和可观测性从应用代码中剥离。技术实现上通过 Mutating Admission Webhook 在每个 Pod 里注入 Envoy 代理，用 iptables 劫持流量。VirtualService 控制流量到哪去（按权重/Header/路径路由），DestinationRule 控制到了后怎么处理（熔断、负载均衡、mTLS）。我们项目用它做金丝雀发布——从 5% 到 100% 渐进放量，Jenkins Groovy 脚本动态 patch VirtualService 的 weight，配合 Prometheus 监控，错误率超阈值自动回滚。」
+
+---
+
+### Q29: What is Istio in the K8s ecosystem? Provide detailed code examples with full comments.
+
+**Answer:**
+
+Istio (Greek for "sail") is a **Service Mesh**. It injects an Envoy Sidecar proxy into every Pod via Mutating Admission Webhook, intercepts all traffic with iptables rules, and provides traffic management (Canary, A/B, timeout, retry, circuit breaker), security (automatic mTLS + AuthorizationPolicy), and observability (Metrics/Tracing/Logging) — all with **zero application code changes**.
+
+**Architecture:**
+```
+Control Plane: istiod (Pilot + Citadel + Galley → one binary since v1.5)
+Data Plane: Envoy Sidecar in every Pod (C++ proxy, ~50MB memory overhead)
+```
+
+**Core CRDs and their roles:**
+
+| CRD | Purpose | Analogy |
+|-----|---------|---------|
+| **VirtualService** | "Where does traffic go?" — route by weight/header/path | Nginx `server { location }` |
+| **DestinationRule** | "What to do at destination?" — subsets, circuit breaker, load balancing, mTLS settings | Upstream connection pool config |
+| **Gateway** | Mesh edge ingress/egress | Nginx listening on :80/:443 |
+| **PeerAuthentication** | Enforce mTLS between services | "All communication must be encrypted" |
+| **AuthorizationPolicy** | Allow/deny based on workload identity | "Only order-service can call user-service" |
+
+**Key code examples included above:**
+
+1. **DestinationRule** — defines v1/v2 subsets + connection pool limits + outlier detection (circuit breaker with `consecutive5xxErrors: 5`, `baseEjectionTime: 60s`)
+2. **VirtualService** — Canary routing: 95% v1 + 5% v2, with `x-canary: enabled` header override for internal testers, timeout 10s, retry 3x on 5xx
+3. **PeerAuthentication** — STRICT mTLS for entire namespace
+4. **AuthorizationPolicy** — allow only order-service and api-gateway to GET user-service, allow notification-worker to POST
+5. **Jenkins Groovy** — automated canary progression 5%→25%→50%→100%, auto-rollback if error rate > 1%
+
+**Interview one-liner:** "Istio gives you AOP for microservice communication — cross-cutting concerns like retry, circuit breaker, mTLS, and tracing happen at the network proxy layer instead of in application code. One VirtualService YAML deploys a Canary release that would otherwise require custom routing code in every service."
+
+---
+
+### Q30: Ansible 的原理是什么？给出使用 Ansible 的实现代码示例，加上充分的注释。
+
+**答案：**
+
+#### Ansible 是什么
+
+**Ansible**（名字来自 Ursula K. Le Guin 科幻小说中一种能超光速通讯的虚构装置）是一个**无 Agent 的 IT 自动化工具**，用 SSH 连接远程机器，执行任务。
+
+**核心特点对比其他工具：**
+
+| 对比维度 | Ansible | Puppet / Chef | Terraform |
+|----------|---------|---------------|-----------|
+| **架构** | **无 Agent**——SSH 连上去执行 | 每台机器装 Agent | API 调云厂商 |
+| **语言** | YAML（Playbook） | 各自的 DSL | HCL |
+| **用途** | 配置管理 + 应用部署 + 编排 | 配置管理（保证配置不漂移） | 基础设施即代码（IaC） |
+| **状态管理** | 无状态文件——每次执行都事无巨细检查 | 有 Agent 持续运行 | tfstate 文件 |
+| **类比** | 一个机器人 SSH 到所有服务器执行你的剧本 | 每台服务器上装一个保安，时刻巡逻 | 云资源的遥控器 |
+
+---
+
+#### Ansible 的核心原理
+
+**Ansible 不装 Agent——它怎么工作？**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│                     Ansible Control Node（你敲命令的机器）         │
+│                                                                  │
+│  ┌────────────────────┐                                         │
+│  │   Playbook (YAML)   │  ← 你写的剧本：「装 JDK 21 → 创建用户    │
+│  │   - 目标机器         │     → 部署 jar → 启动服务」              │
+│  │   - 任务列表         │                                         │
+│  └────────┬───────────┘                                         │
+│           │                                                      │
+│           ▼                                                      │
+│  ┌────────────────────┐                                         │
+│  │  Ansible Engine    │                                         │
+│  │  1. 解析 Playbook   │                                         │
+│  │  2. 生成 Python 脚本 │  ← 把每个 task 翻译成 Python 代码        │
+│  │  3. SSH 到目标机器    │                                         │
+│  │  4. 把 Python 脚本    │                                         │
+│  │     scp 过去          │                                         │
+│  │  5. 远程执行 + 收集结果│                                         │
+│  └────────┬───────────┘                                         │
+│           │                                                      │
+└───────────┼──────────────────────────────────────────────────────┘
+            │ SSH (你机器上已有的 ~/.ssh/id_rsa)
+            │
+   ┌────────┴────────┬────────────────┬────────────────┐
+   ▼                 ▼                ▼                ▼
+┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐
+│ Server 1 │  │ Server 2 │  │ Server 3 │  │ Server 4 │
+│ 只需要：  │  │ 只需要：  │  │ 只需要：  │  │ 只需要：  │
+│ • SSH     │  │ • SSH     │  │ • SSH     │  │ • SSH     │
+│ • Python  │  │ • Python  │  │ • Python  │  │ • Python  │
+│ 不需要装   │  │ 不需要装   │  │ 不需要装   │  │ 不需要装   │
+│ Agent!   │  │ Agent!   │  │ Agent!   │  │ Agent!   │
+└──────────┘  └──────────┘  └──────────┘  └──────────┘
+```
+
+**关键原理——Ansible 的幂等性（Idempotency）：**
+
+Ansible 的每个 module 都实现了**幂等**逻辑。例如 `apt: name=openjdk-21-jdk state=present`：
+
+```python
+# Ansible 执行时的伪代码逻辑（实际是 Python）
+def apt_module(package_name, desired_state):
+    current_state = check_if_installed(package_name)  # dpkg -l | grep openjdk-21-jdk
+
+    if current_state == desired_state:
+        return {"changed": False, "msg": "already installed"}   # 幂等！什么都不做
+
+    if desired_state == "present":
+        run("apt install -y openjdk-21-jdk")
+        return {"changed": True, "msg": "installed"}            # 真的安装了
+
+# 这就是为什么同一个 Playbook 可以反复跑——第二次跑所有 task 都是 ok（绿色），不是 changed（黄色）
+```
+
+---
+
+#### 完整实战示例：用 Ansible 初始化一台新的 Ubuntu 服务器并部署 smart-invest
+
+**项目目录结构（Ansible 最佳实践）：**
+
+```
+ansible-smart-invest/
+├── ansible.cfg                    # Ansible 全局配置
+├── inventory/
+│   ├── production                 # 生产环境机器列表（Inventory）
+│   └── staging                    # 测试环境机器列表
+├── playbooks/
+│   ├── site.yml                   # 主 Playbook（入口）
+│   ├── init-server.yml            # 服务器初始化
+│   ├── deploy-app.yml             # 部署应用
+│   └── canary-release.yml         # 金丝雀发布
+├── roles/
+│   ├── common/                    # 通用角色：所有服务器都要装的
+│   │   ├── tasks/main.yml
+│   │   └── handlers/main.yml
+│   ├── java/                      # JDK 安装角色
+│   │   └── tasks/main.yml
+│   ├── docker/                    # Docker 安装角色
+│   │   └── tasks/main.yml
+│   ├── k3s/                       # K3S 安装角色
+│   │   └── tasks/main.yml
+│   └── smart-invest/              # 应用部署角色
+│       ├── tasks/main.yml
+│       ├── templates/             # Jinja2 模板文件
+│       │   └── values-override.yaml.j2
+│       └── files/                 # 要拷贝到目标机器的静态文件
+│           └── helm-charts.tar.gz
+└── group_vars/
+    ├── all.yml                    # 所有机器的公共变量
+    ├── production.yml             # 生产环境变量
+    └── staging.yml                # 测试环境变量
+```
+
+**文件 1：Inventory（机器清单）**
+
+```yaml
+# =============================================================================
+# inventory/production —— Ansible 的「机器清单」
+# =============================================================================
+# 告诉 Ansible 要管理哪些机器、怎么连、怎么分组
+all:                                          # all = 所有机器的根分组
+  children:                                   # children = 子分组
+    k3s_master:                               # 分组 1：K3S Master 节点
+      hosts:
+        asus-server:                          # 机器别名（host alias）
+          ansible_host: 192.168.31.192        # 实际 IP 或域名
+          ansible_user: george                # SSH 用户名
+          ansible_become: yes                 # 是否使用 sudo 提权
+          ansible_become_method: sudo         # 提权方式
+          ansible_become_password: "George0"  # sudo 密码（生产环境用 ansible-vault 加密！）
+    k3s_worker:                               # 分组 2：K3S Worker 节点（未来扩展）
+      hosts:
+        worker-1:
+          ansible_host: 192.168.31.193
+          ansible_user: george
+          ansible_become: yes
+
+    k3s_cluster:                              # 逻辑分组：包含 Master + Worker
+      children:
+        k3s_master:
+        k3s_worker:
+```
+
+**文件 2：全局变量**
+
+```yaml
+# =============================================================================
+# group_vars/all.yml —— 所有机器共享的变量
+# =============================================================================
+# 在 Playbook / Template 中通过 {{ variable_name }} 引用
+
+# ---------- 通用 ----------
+timezone: "Asia/Shanghai"
+
+# ---------- Java ----------
+java_package: "openjdk-21-jdk-headless"        # 生产用 headless（无 GUI，节省空间）
+java_home: "/usr/lib/jvm/java-21-openjdk-arm64"
+
+# ---------- Docker ----------
+docker_users:                                   # 哪些用户能用 docker 命令
+  - george
+
+# ---------- K3S ----------
+k3s_version: "v1.28.4+k3s2"                   # 锁定版本（不用 latest——防止意外升级）
+k3s_token: "{{ vault_k3s_token }}"             # 引用 ansible-vault 加密的变量
+k3s_tls_san:
+  - "192.168.31.192"
+  - "asus-server.local"
+
+# ---------- smart-invest 应用 ----------
+smart_invest_namespace: "smart-invest"
+smart_invest_release_name: "smart-invest"
+smart_invest_image_registry: "gongchengship"
+smart_invest_chart_path: "/opt/smart-invest/helm-charts/umbrella"
+```
+
+**文件 3：Ansible 全局配置**
+
+```ini
+# =============================================================================
+# ansible.cfg —— Ansible 的全局行为配置
+# =============================================================================
+# 可以放在项目根目录或 /etc/ansible/ansible.cfg
+[defaults]
+# inventory 文件路径
+inventory = ./inventory/production
+
+# 并发执行的任务数（Controls how many hosts to configure in parallel）
+forks = 5
+
+# SSH 连接复用（显著加速——避免每次 task 都重新 SSH 握手）
+pipelining = True
+
+# 输出格式：可读的而非 JSON
+stdout_callback = yaml
+
+# 角色目录
+roles_path = ./roles
+
+# 不使用 cowsay（彩蛋——默认会在输出里随机显示一头牛: " _____ < Moo! >"）
+nocows = True
+
+# 私钥
+private_key_file = ~/.ssh/id_ed25519
+
+# 不检查 host key（首次连接不会卡在确认提示）
+host_key_checking = False
+
+[ssh_connection]
+# SSH 参数
+ssh_args = -o ControlMaster=auto -o ControlPersist=60s
+```
+
+**文件 4：主 Playbook（入口）**
+
+```yaml
+# =============================================================================
+# playbooks/site.yml —— 主 Playbook（唯一的执行入口）
+# =============================================================================
+# 用法：ansible-playbook playbooks/site.yml
+#       ansible-playbook playbooks/site.yml --tags "deploy"    # 只跑 deploy
+#       ansible-playbook playbooks/site.yml --limit k3s_master # 只跑 master
+#       ansible-playbook playbooks/site.yml --check --diff     # 干跑（dry-run）
+---
+# ===== Play 1：初始化所有服务器 =====
+- name: "初始化所有 K3S 节点：基础环境"         # play 的名字（人类可读）
+  hosts: k3s_cluster                          # 目标主机组（来自 inventory）
+  gather_facts: yes                           # 先收集目标机器的系统信息（OS/CPU/内存/IP）
+  roles:
+    - common                                  # 角色：装常用工具、配置时区、SSH 加固
+    - java                                    # 角色：装 JDK 21
+    - docker                                  # 角色：装 Docker + 配置用户组
+
+# ===== Play 2：安装 K3S Master =====
+- name: "安装 K3S Master 节点"
+  hosts: k3s_master
+  roles:
+    - k3s                                     # 角色：装 K3S + 等 Ready
+
+# ===== Play 3：部署 smart-invest 应用到 K3S =====
+- name: "部署 smart-invest 微服务全家桶"
+  hosts: k3s_master
+  vars:
+    deploy_image_tag: "{{ lookup('env', 'IMAGE_TAG') | default('latest', true) }}"
+  roles:
+    - smart-invest                            # 角色：上传 Helm chart + helm upgrade --install
+```
+
+**文件 5：服务器初始化角色**
+
+```yaml
+# =============================================================================
+# roles/common/tasks/main.yml —— 服务器基础初始化
+# =============================================================================
+---
+# 任务 1：更新 apt 缓存
+# apt = Ansible 内置 module，用于 Debian/Ubuntu 的包管理
+# update_cache=yes  → 等价于 apt update
+# cache_valid_time  → 3600 秒内如果已更新过，就跳过（幂等性优化）
+- name: "更新 apt 软件包索引"
+  ansible.builtin.apt:                         # 内置 apt 模块
+    update_cache: yes
+    cache_valid_time: 3600
+
+# 任务 2：安装常用工具包
+# state: present  → 确保这些包已安装（已装就跳过 = 幂等）
+- name: "安装服务器常用工具"
+  ansible.builtin.apt:
+    name:
+      - htop                                   # 交互式进程查看器
+      - net-tools                              # ifconfig / netstat
+      - curl
+      - wget
+      - vim
+      - git
+      - jq                                     # JSON 命令行处理（kubectl get -o json | jq）
+      - unzip
+      - ufw                                    # 防火墙
+    state: present
+    # absent = 删掉包 / latest = 更新到最新版 / present = 装好了就行
+
+# 任务 3：配置时区
+- name: "设置系统时区为 {{ timezone }}"
+  ansible.builtin.timezone:                   # 内置时区模块
+    name: "{{ timezone }}"                    # 引用 group_vars/all.yml 中的变量
+
+# 任务 4：配置 SSH 安全加固
+# template 模块 = 把本地 Jinja2 模板变量替换后，拷贝到远程机器
+- name: "应用 SSH 安全配置"
+  ansible.builtin.template:
+    src: sshd_config.j2                       # 本地模板文件（Jinja2 格式）
+    dest: /etc/ssh/sshd_config                # 目标机器上的路径
+    owner: root
+    group: root
+    mode: '0600'                              # 只有 root 可读写
+    validate: '/usr/sbin/sshd -t -f %s'       # 应用前先验证！防止配错后 SSH 断掉
+  notify: restart sshd                        # 如果文件被修改了 → 通知 handler "restart sshd"
+
+# 任务 5：配置防火墙
+- name: "开启 UFW 防火墙"
+  community.general.ufw:
+    rule: allow                               # allow / deny / reject
+    port: "22"
+    proto: tcp
+  # 你可以在以后的任务中加入：
+  # - name: "允许 K3S API Server"
+  #   community.general.ufw: { rule: allow, port: "6443", proto: tcp }
+```
+
+**文件 6：Handlers（触发器）**
+
+```yaml
+# =============================================================================
+# roles/common/handlers/main.yml —— 被 notify 触发的动作
+# =============================================================================
+# Handler 特殊之处：只有当 notify 它的 task 的 changed=true 时才执行
+# 而且所有 task 跑完后统一执行（不是立即执行），避免重复重启
+---
+- name: "重启 SSH 服务"
+  ansible.builtin.service:
+    name: sshd                                # systemctl 的服务名
+    state: restarted
+```
+
+**文件 7：K3S 安装角色**
+
+```yaml
+# =============================================================================
+# roles/k3s/tasks/main.yml —— 安装并配置 K3S
+# =============================================================================
+---
+# 任务 1：下载 K3S 安装脚本
+- name: "下载 K3S 安装脚本"
+  ansible.builtin.get_url:                    # 类似 wget 的模块
+    url: https://get.k3s.io
+    dest: /tmp/k3s-install.sh
+    mode: '0755'                              # rwxr-xr-x
+
+# 任务 2：安装 K3S
+# 只有 K3S 还没装的时候才执行（creates 参数）
+# creates: 如果这个文件已经存在 → 跳过（幂等！）
+- name: "安装 K3S Master"
+  ansible.builtin.shell:                      # shell = 执行任意命令（比 command 更灵活）
+    cmd: |
+      INSTALL_K3S_VERSION="{{ k3s_version }}"       # 锁定版本
+      INSTALL_K3S_EXEC="--tls-san {{ k3s_tls_san | join(',') }}"  # TLS SAN
+      /tmp/k3s-install.sh
+  args:
+    creates: /usr/local/bin/k3s               # 如果 k3s 二进制已存在 → 跳过安装
+
+# 任务 3：等 K3S 就绪
+- name: "等待 K3S API Server 就绪"
+  ansible.builtin.command: "k3s kubectl get nodes"
+  register: k3s_result                        # 把命令输出存到变量 k3s_result
+  until: k3s_result.rc == 0                   # 重试直到退出码为 0（成功）
+  retries: 30                                 # 最多重试 30 次
+  delay: 10                                   # 每次等 10 秒
+  changed_when: false                         # 这个 task 永远不是 "changed"
+
+# 任务 4：配置 kubectl（把 K3S 的 kubeconfig 拷到 george 用户下）
+- name: "把 kubeconfig 拷贝到用户目录"
+  ansible.builtin.copy:
+    src: /etc/rancher/k3s/k3s.yaml           # 源（远程机器上）
+    dest: /home/george/.kube/config           # 目标
+    owner: george
+    group: george
+    mode: '0600'
+    remote_src: yes                           # src 在远程机器上而非本地
+
+# 任务 5：安装 Helm
+- name: "下载并安装 Helm"
+  ansible.builtin.shell: |
+    curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+  args:
+    creates: /usr/local/bin/helm
+```
+
+**文件 8：应用部署角色（核心）**
+
+```yaml
+# =============================================================================
+# roles/smart-invest/tasks/main.yml —— Helm 部署 smart-invest
+# =============================================================================
+---
+# 任务 1：创建项目目录
+- name: "创建 smart-invest 部署目录"
+  ansible.builtin.file:                       # file 模块操作文件属性
+    path: /opt/smart-invest
+    state: directory                          # 确保是个目录（directory / file / link / absent）
+    owner: george
+    group: george
+    mode: '0755'
+
+# 任务 2：上传 Helm charts 到服务器
+# synchronize = rsync 封装（比 copy 快——只传差异！）
+- name: "同步 Helm Charts 到服务器"
+  ansible.posix.synchronize:
+    src: "{{ playbook_dir }}/../infrastructure/helm-charts/"  # 本地路径
+    dest: /opt/smart-invest/helm-charts/                      # 远程路径
+    # 删除远程有但本地没有的文件（保持完全一致）
+    delete: yes
+    rsync_opts:
+      - "--exclude=.git"
+      - "--exclude=*.tgz"
+
+# 任务 3：构建 Helm 依赖
+- name: "构建 Helm Chart 依赖"
+  ansible.builtin.command:
+    cmd: helm dependency build .
+    chdir: "{{ smart_invest_chart_path }}"     # 在哪个目录下执行
+  register: helm_dep_result                   # 存输出
+
+# 任务 4：从 Values 模板生成环境配置文件
+# template: Jinja2 变量替换后写入远程文件
+# 你的 group_vars/production.yml 中的变量会被填入 values-override.yaml.j2 模板
+- name: "生成环境配置文件"
+  ansible.builtin.template:
+    src: values-override.yaml.j2              # Jinja2 模板
+    dest: /opt/smart-invest/values-override.yaml
+    owner: george
+    group: george
+    mode: '0644'
+
+# 任务 5：Helm 部署（或升级）
+- name: "部署 smart-invest（Helm upgrade --install）"
+  ansible.builtin.command:
+    cmd: >
+      helm upgrade --install {{ smart_invest_release_name }} .            # --install = 首次安装也兼容
+      --namespace {{ smart_invest_namespace }}
+      --create-namespace
+      --values /opt/smart-invest/values-override.yaml                     # 环境变量文件
+      --set user-service.image.tag={{ deploy_image_tag }}                 # 动态镜像 tag
+      --set fund-service.image.tag={{ deploy_image_tag }}
+      --set order-service.image.tag={{ deploy_image_tag }}
+      --set notification-worker.image.tag={{ deploy_image_tag }}
+      --set api-gateway.image.tag={{ deploy_image_tag }}
+      --set frontend.image.tag={{ deploy_image_tag }}
+      --wait --timeout 300s
+    chdir: "{{ smart_invest_chart_path }}"
+  register: helm_result
+
+# 任务 6：输出部署结果（方便在 Ansible 输出中看到）
+- name: "打印 Helm 部署结果"
+  ansible.builtin.debug:
+    var: helm_result.stdout_lines
+
+# 任务 7：健康检查——确认所有 Pod Running
+- name: "验证所有 Pod 都在运行"
+  ansible.builtin.command: "kubectl get pods -n {{ smart_invest_namespace }}"
+  register: pod_status
+- name: "打印 Pod 状态"
+  ansible.builtin.debug:
+    var: pod_status.stdout_lines
+```
+
+**文件 9：Jinja2 模板示例**
+
+```yaml
+# =============================================================================
+# roles/smart-invest/templates/values-override.yaml.j2
+# =============================================================================
+# 这是一个 Jinja2 模板。{{ }} 中的变量在 ansible-playbook 执行时被替换。
+# 模板可以在远程服务器上生成不同环境的配置文件，不需要为每个环境维护一份独立的 YAML。
+
+# 全局镜像版本（由 CI/CD 的 IMAGE_TAG 环境变量传入）
+global:
+  imageTag: "{{ deploy_image_tag }}"              # {{ }} = Jinja2 变量占位符
+
+# Secrets —— 生产密码从 Ansible Vault 加密变量中解密后写入
+# 注意：这个文件是运行时生成的，生成后可以立即删除
+secrets:
+  # lookup('community.hashi_vault.vault_kv2_read', ...) → 从 HashiCorp Vault 动态拉取密码
+  dbPassword: "{{ vault_db_password }}"
+  jwtSecret: "{{ vault_jwt_secret }}"
+  rabbitmqPassword: "{{ vault_rabbitmq_password }}"
+
+# 各服务的副本数——生产环境至少 2 个
+{% for svc in ['user-service', 'fund-service', 'order-service'] %}  {# Jinja2 for 循环 #}
+{{ svc }}:
+  replicaCount: {{ prod_replica_count | default(2) }}  {# | default = 过滤器，有默认值 #}
+  image:
+    tag: "{{ deploy_image_tag }}"
+{% endfor %}                                     {# 循环结束 #}
+
+# api-gateway 是流量入口，需要多副本
+api-gateway:
+  replicaCount: {{ api_gateway_replicas | default(3) }}
+  image:
+    tag: "{{ deploy_image_tag }}"
+
+# 特殊服务——notification-worker 只需要 1 个（避免重复消费 MQ）
+notification-worker:
+  replicaCount: 1
+  image:
+    tag: "{{ deploy_image_tag }}"
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
+# 环境差异化配置
+{% if env == 'production' %}                     {# Jinja2 条件判断 #}
+# 生产环境：HPA 弹性伸缩
+user-service:
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 70
+{% else %}
+# 非生产环境：固定副本数，不开 HPA（省钱）
+user-service:
+  autoscaling:
+    enabled: false
+{% endif %}
+```
+
+**文件 10：金丝雀发布 Playbook**
+
+```yaml
+# =============================================================================
+# playbooks/canary-release.yml —— 金丝雀发布
+# =============================================================================
+# 用法：ansible-playbook playbooks/canary-release.yml -e "canary_weight=25"
+---
+- name: "金丝雀发布——调整 user-service v2 流量为 {{ canary_weight }}%"
+  hosts: k3s_master
+  vars:
+    canary_weight: "{{ canary_weight | default(5) }}"  # 默认 5%，可命令行 -e 覆盖
+    v1_weight: "{{ 100 - canary_weight | int }}"        # v1 的流量 = 100 - 金丝雀比例
+  tasks:
+    # Step 1：调整 VirtualService weight
+    - name: "更新 VirtualService 流量权重"
+      ansible.builtin.command:
+        cmd: |
+          kubectl patch virtualservice user-service -n smart-invest \
+            --type='json' \
+            -p='[
+              {"op":"replace","path":"/spec/http/1/route/0/weight","value":{{ v1_weight }}},
+              {"op":"replace","path":"/spec/http/1/route/1/weight","value":{{ canary_weight }}}
+            ]'
+
+    # Step 2：等几分钟让新版本充分暴露在流量下
+    - name: "等待 {{ canary_wait_seconds | default(300) }} 秒——观察金丝雀指标"
+      ansible.builtin.pause:
+        seconds: "{{ canary_wait_seconds | default(300) }}"
+
+    # Step 3：检查新版本的健康状态
+    - name: "查询 Prometheus——v2 的 5xx 错误率"
+      ansible.builtin.uri:                       # uri 模块 = curl 的 Ansible 版
+        url: "http://prometheus:9090/api/v1/query"
+        method: GET
+        body_format: form-urlencoded
+        body:
+          query: |
+            sum(rate(istio_requests_total{
+              destination_service_name="user-service",
+              destination_version="v2",
+              response_code=~"5.."
+            }[5m]))
+            /
+            sum(rate(istio_requests_total{
+              destination_service_name="user-service",
+              destination_version="v2"
+            }[5m]))
+      register: prometheus_result
+
+    # Step 4：如果错误率超阈值 → 自动回滚
+    - name: "自动回滚——v2 错误率过高！"
+      ansible.builtin.command:
+        cmd: |
+          kubectl patch virtualservice user-service -n smart-invest \
+            --type='json' \
+            -p='[
+              {"op":"replace","path":"/spec/http/1/route/0/weight","value":100},
+              {"op":"replace","path":"/spec/http/1/route/1/weight","value":0}
+            ]'
+      when: (prometheus_result.json.data.result[0].value[1] | float) > 0.01
+      # when = 条件判断——只在错误率 > 1% 时执行！
+```
+
+**文件 11：用 Ansible Vault 加密敏感变量**
+
+```bash
+# =============================================================================
+# Ansible Vault —— 加密你的密码文件
+# =============================================================================
+
+# 1. 创建加密文件
+ansible-vault create group_vars/production/vault.yml
+# 输入密码 → 打开编辑器 → 写入：
+# vault_db_password: "P@ssw0rd123!"
+# vault_jwt_secret: "prod-jwt-secret-key-32bytes"
+# 保存退出 → 文件自动 AES-256 加密
+
+# 2. 查看加密文件内容（需要密码）
+ansible-vault view group_vars/production/vault.yml
+
+# 3. 执行 Playbook 时自动解密
+ansible-playbook playbooks/site.yml --ask-vault-pass     # 交互式输入密码
+ansible-playbook playbooks/site.yml --vault-password-file ~/.ansible-vault-pass  # 从文件读密码
+
+# 4. CI/CD 中自动化（Jenkins / GitHub Actions）
+# 把 vault 密码存在 Jenkins Credentials / GitHub Secrets 中
+# Jenkinsfile 中：
+#   withCredentials([string(credentialsId: 'ansible-vault-password', variable: 'VAULT_PASS')]) {
+#     sh 'ansible-playbook playbooks/site.yml --vault-password-file <(echo ${VAULT_PASS})'
+#   }
+```
+
+---
+
+#### 面试最佳回答思路
+
+> 「Ansible 是无 Agent 的自动化工具——通过 SSH 连到目标机器，把 YAML Playbook 翻译成 Python 脚本，scp 过去执行。核心优势是不需要在目标机器装 Agent。每个 module 实现幂等逻辑，同一个 Playbook 可以反复安全执行。我们用 Ansible 做服务器初始化（装 JDK/Docker/K3S）、应用 Helm 部署、以及金丝雀发布的流程编排。敏感变量用 Ansible Vault AES-256 加密存储，CI/CD Pipeline 中用 --vault-password-file 解密。」
+
+---
+
+### Q30: What is Ansible's principle? Provide detailed code examples with full comments.
+
+**Answer:**
+
+Ansible is an **agentless IT automation tool** that uses SSH to connect to remote machines, translates YAML Playbooks into Python scripts, copies them over, executes them, and collects results. No agent installation required on target hosts — just SSH and Python.
+
+**Core principles:**
+
+| Principle | Explanation |
+|-----------|-------------|
+| **Agentless** | Connects via SSH — no agent daemon to install, upgrade, or maintain on target machines |
+| **Idempotency** | Every module checks current state before acting. Run the same Playbook 100 times — only the first run actually changes anything |
+| **Declarative** | You describe the desired state (`state: present`), Ansible figures out how to get there |
+| **Push-based** | Control node initiates the connection (vs Puppet/Chef where agents pull from a master) |
+
+**Architecture:**
+```
+Playbook (YAML) → Ansible Engine → translates each task into Python script
+                                 → SSH + scp to target machine
+                                 → execute remotely
+                                 → collect results
+```
+
+**Execution output colors:**
+- **Green** = ok (already in desired state, idempotent — nothing changed)
+- **Yellow** = changed (made a modification)
+- **Red** = failed (error occurred, execution stopped)
+
+**Key modules used in the example:**
+
+| Module | Purpose | Equivalent |
+|--------|---------|------------|
+| `ansible.builtin.apt` | Package management | `apt install/update` |
+| `ansible.builtin.copy` | Copy files | `scp` |
+| `ansible.builtin.template` | Copy + Jinja2 variable substitution | `sed` on steroids |
+| `ansible.builtin.command` / `shell` | Execute arbitrary commands | `ssh ... "command"` |
+| `ansible.builtin.file` | Manage file/directory attributes | `mkdir` + `chmod` + `chown` |
+| `ansible.posix.synchronize` | rsync wrapper | `rsync` |
+| `ansible.builtin.get_url` | Download file | `curl` / `wget` |
+| `ansible.builtin.debug` | Print variable | `echo` |
+| `ansible.builtin.pause` | Wait N seconds | `sleep` |
+| `community.general.ufw` | Firewall management | `ufw allow/deny` |
+| `ansible.builtin.uri` | HTTP request | `curl` |
+| `community.hashi_vault.vault_kv2_read` | Read from HashiCorp Vault | `vault read` |
+
+**Interview one-liner:** "Ansible is an agentless automation tool that uses SSH to push configuration changes. Its Playbooks are declarative YAML — you say `state: present` and Ansible handles the idempotency check. We use it for server provisioning, Helm-based deployments, and canary release orchestration, with Ansible Vault encrypting all secrets at rest with AES-256."
+
+---
+
 ## 附录 / Appendix
 
 ### 常用 K8s 排错命令速查 / Common K8s Troubleshooting Commands
