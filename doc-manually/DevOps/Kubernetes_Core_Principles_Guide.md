@@ -17,15 +17,17 @@
 | 三 | 核心工作模型：声明式 + 控制器模式                                                      |
 | 四 | 控制平面组件详解（kube-apiserver / etcd(Editable Text Configuration-Distributed) / scheduler / controller-manager）      |
 | 五 | 工作节点的真正常驻进程（kubelet / kube-proxy / CRI & CNI）                           |
-| 六 | 核心工作负载资源（Pod / Deployment / ReplicaSet / StatefulSet / DaemonSet / Job） |
+| 六 | 核心工作负载资源（Pod / Deployment / ReplicaSet / StatefulSet / DaemonSet / Job / CronJob） |
 | 七 | 网络与流量（Service / Ingress / CoreDNS / kube-proxy）                         |
-| 八 | 配置与存储（ConfigMap / Secret / PVC / PV）                                    |
-| 九 | 弹性伸缩（HPA / VPA / Cluster Autoscaler）                                    |
+| 八 | 配置与存储（ConfigMap / Secret / PVC / PV / ResourceQuota / LimitRange）       |
+| 九 | 弹性伸缩与中断保护（HPA / VPA / Cluster Autoscaler / PDB）                        |
 | 十 | 自我修复机制（Probe / ReplicaSet 自愈 / Node Controller）                         |
-| 十一 | 完整调度流程：一个 Pod 的诞生 + K8s Events 机制                                                       |
+| 十一 | 完整调度流程：一个 Pod 的诞生 + K8s Events 机制                                    |
+| 十一(EN) | Full Scheduling Flow: The Birth of a Pod                                    |
 | 十二 | K8s 生态核心工具清单                                                            |
 | 附 A | 关键缩写全称速查                                                                |
-| 附 B | 用你的 smart-invest 项目验证原理                                                 |
+| 附 B | K8s 资源类型全景速查（按用途分类 + kubectl 简写 + 记忆口诀）                                |
+| 附 C | 用你的 smart-invest 项目验证原理                                                 |
 
 ---
 
@@ -829,9 +831,95 @@ PVC = 用户申请的存储请求（「我要 5G」）
   PVC = DataSource.getConnection()（申请资源）
 ```
 
+### 8.4 ResourceQuota 与 LimitRange ——命名空间的资源边界
+
+#### 8.4.1 ResourceQuota（资源配额）——硬上限，不能超过
+
+| 属性 | 说明 |
+|------|------|
+| **全称** | Resource Quota（资源配额） |
+| **身份** | 限制一个 Namespace 可以消耗的资源总量 |
+| **行为** | 超过 Quota 时，API Server **直接拒绝**创建新资源 |
+
+**Quota = 硬上限，不许超过。**
+
+```yaml
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: team-a-quota
+  namespace: team-a
+spec:
+  hard:
+    requests.cpu: "8"          # 最多申请 8 核 CPU
+    requests.memory: "16Gi"    # 最多申请 16G 内存
+    persistentvolumeclaims: "5" # 最多 5 个 PVC
+    count/services: "10"       # 最多 10 个 Service
+    count/secrets: "20"        # 最多 20 个 Secret
+```
+
+**类比：** 你妈说「一天最多玩 2 小时游戏」——玩到 2 小时，电脑直接关机。
+
+#### 8.4.2 LimitRange（范围限制）——单个资源的上下限
+
+| 属性 | 说明 |
+|------|------|
+| **全称** | Limit Range（限制范围） |
+| **身份** | 限制 Namespace 内**单个** Pod/容器的资源上下限 |
+| **和 ResourceQuota 的区别** | ResourceQuota 管总量，LimitRange 管单个 |
+
+```yaml
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: default-limits
+  namespace: team-a
+spec:
+  limits:
+  - type: Container
+    default:
+      cpu: "500m"              # 不写 limits 时默认给 0.5 核
+      memory: "512Mi"
+    defaultRequest:
+      cpu: "200m"              # 不写 requests 时默认申请 0.2 核
+      memory: "256Mi"
+    max:
+      cpu: "2"                 # 单个容器最多 2 核
+      memory: "4Gi"
+    min:
+      cpu: "100m"              # 单个容器至少 0.1 核
+      memory: "128Mi"
+```
+
+#### 8.4.3 Quota vs Budget ——理解两个概念的本质区别
+
+这两个英文单词在 K8s 中都代表「限制」，但方向完全相反：
+
+| | Quota（配额） | Budget（预算） |
+|---|---|---|
+| **方向** | 限制**上限**（不能超过 X） | 保护**下限**（至少保留 Y） |
+| **行为** | 超了就拒绝 | 不够就等待/阻止中断 |
+| **K8s 资源** | ResourceQuota | PodDisruptionBudget（PDB） |
+| **管控对象** | 资源的**创建**（别建太多） | Pod 的**驱逐**（别杀太多） |
+| **典型场景** | 多租户隔离，防止一个团队吃光集群 | 节点维护时保证服务不中断 |
+
+**为什么两个概念要同时存在？**
+
+在实际运维中，这两者配合使用：
+
+```
+Namespace: team-a
+├── ResourceQuota: 最多用 8 核 CPU、16G 内存     ← Quota（管创建：别建太多）
+└── PDB: 至少要有 2 个 app-pod 始终运行         ← Budget（管驱逐：别杀太多）
+```
+
+**Quota 管「生」（创建），Budget 管「死」（驱逐）**——一个在入口把关，一个在出口保护。
+
+> **PDB（PodDisruptionBudget）详解见第九章 9.4 节。**
+
 ---
 
-## 九、弹性伸缩（HPA / VPA / Cluster Autoscaler）
+## 九、弹性伸缩与中断保护（HPA / VPA / Cluster Autoscaler / PDB）
 
 ### 9.1 HPA（Horizontal Pod Autoscaler）——水平 Pod 扩缩容
 
@@ -876,6 +964,58 @@ Cluster Autoscaler 检测到 unschedulable Pod
     ↓
 Scheduler 把 Pod 调度到新节点
 ```
+
+### 9.4 PDB（PodDisruptionBudget）——Pod 中断预算
+
+| 属性 | 说明 |
+|------|------|
+| **全称** | Pod Disruption Budget |
+| **身份** | 保护 Pod 在「自愿中断」时不被全部清空——规定最少保持几个 Pod 在线 |
+| **类比** | 你妈说「不管你怎么安排，家里至少要有 2 个人在」——可以有人出门，但不能全走光 |
+
+**Budget（预算）在这里的含义：** 弹性区间，保护下限。不是硬上限（那是 Quota），而是允许计划内调整的同时，保证服务不中断。
+
+**PDB 管的是「自愿中断（Voluntary Disruption）」**，包括：
+- `kubectl drain`（节点维护排空）
+- 节点自动缩放（Cluster Autoscaler 缩容）
+- Deployment 滚动更新
+
+**PDB 不管的是「非自愿中断（Involuntary Disruption）」**，包括：
+- 节点硬件故障
+- 内核 panic
+- 节点网络分区导致被驱逐
+
+**两种指定方式（二选一）：**
+
+```yaml
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: user-service-pdb
+spec:
+  # 方式一：最少可用数量
+  minAvailable: 2     # 「至少要有 2 个 Pod 是好的」
+  # 方式二：最多不可用数量（二选一）
+  # maxUnavailable: 1  # 「最多只能有 1 个 Pod 不可用」
+
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: user-service
+```
+
+**面试要点：**
+- `minAvailable: 1` 是常见最低配置——至少保证 1 个 Pod 处理流量
+- 如果 PDB 要求 `minAvailable: 2`，但 Deployment 只有 `replicas: 2`，则 `kubectl drain` 会被**永久阻塞**——这是新手常踩的坑
+- PDB 不阻止非自愿中断（节点宕机），只影响自愿中断（维护操作）
+
+**Quota vs Budget 对比回顾：**
+
+| | Quota（配额） | Budget（预算） |
+|---|---|---|
+| **方向** | 限制**上限**（不能超过 X） | 保护**下限**（至少保留 Y） |
+| **行为** | 超了就拒绝 | 不够就等待/阻止操作 |
+| **K8s 资源** | ResourceQuota | PodDisruptionBudget（PDB） |
+| **管什么** | 资源的**创建**（别建太多） | Pod 的**驱逐**（别杀太多） |
 
 ---
 
@@ -1243,7 +1383,95 @@ kubectl get events -n smart-invest --sort-by='.lastTimestamp'
 
 ---
 
-## 附 B：用你的 smart-invest 项目验证原理
+## 附 B：K8s 资源类型全景速查
+
+> 按用途分类，附带 `kubectl` 简写和一句话说明。用 `kubectl api-resources` 可以查看集群实际支持的所有资源类型。
+
+### 一、工作负载资源 (Workloads)
+
+| 资源 | 简称 | 用途 |
+|------|------|------|
+| **Pod** | `po` | 最小调度单元，包含一个或多个容器 |
+| **Deployment** | `deploy` | 无状态应用部署，支持滚动更新和回滚 |
+| **ReplicaSet** | `rs` | 维护指定数量的 Pod 副本（通常由 Deployment 管理） |
+| **StatefulSet** | `sts` | 有状态应用（数据库等），保证 Pod 的稳定标识和持久存储 |
+| **DaemonSet** | `ds` | 每个节点运行一个 Pod（日志采集、监控 agent） |
+| **Job** | — | 一次性任务，完成后退出 |
+| **CronJob** | `cj` | 定时任务，按 cron 表达式调度 Job |
+| **ReplicationController** | `rc` | 旧版副本控制器（已被 ReplicaSet 替代） |
+
+### 二、服务发现与负载均衡 (Service & Networking)
+
+| 资源 | 简称 | 用途 |
+|------|------|------|
+| **Service** | `svc` | 为 Pod 提供稳定的访问入口（ClusterIP / NodePort / LoadBalancer / ExternalName） |
+| **Endpoints** | `ep` | 记录 Service 后端 Pod 的 IP 列表（通常自动管理） |
+| **EndpointSlice** | — | Endpoints 的分片版本，更高效（v1.21+ GA） |
+| **Ingress** | `ing` | HTTP/HTTPS 路由规则，将外部流量转发到 Service |
+| **IngressClass** | — | 指定 Ingress 控制器的类型（v1.18+） |
+| **NetworkPolicy** | `netpol` | Pod 间的网络访问控制（防火墙规则） |
+
+### 三、配置与存储 (Config & Storage)
+
+| 资源 | 简称 | 用途 |
+|------|------|------|
+| **ConfigMap** | `cm` | 非敏感配置数据（环境变量、配置文件） |
+| **Secret** | — | 敏感数据（密码、Token、证书） |
+| **PersistentVolume** | `pv` | 集群级别的存储资源（管理员创建） |
+| **PersistentVolumeClaim** | `pvc` | 用户对存储的申请（绑定 PV） |
+| **StorageClass** | `sc` | 动态 PV 供应的模板（定义存储类型和参数） |
+| **VolumeAttachment** | — | 记录卷与节点的挂载关系 |
+
+### 四、安全与访问控制 (Security & RBAC)
+
+| 资源 | 简称 | 用途 |
+|------|------|------|
+| **ServiceAccount** | `sa` | Pod 运行时的身份标识 |
+| **Role** | — | 命名空间级别的权限规则 |
+| **ClusterRole** | — | 集群级别的权限规则 |
+| **RoleBinding** | — | 将 Role 绑定到用户/组/SA（命名空间级） |
+| **ClusterRoleBinding** | — | 将 ClusterRole 绑定到用户/组/SA（集群级） |
+| **PodSecurityPolicy** | `psp` | Pod 安全策略（已废弃，改用 Pod Security Admission） |
+
+### 五、命名空间与资源管理
+
+| 资源 | 简称 | 用途 |
+|------|------|------|
+| **Namespace** | `ns` | 逻辑隔离单元，资源分组 |
+| **ResourceQuota** | `quota` | 限制命名空间的资源使用总量（硬上限，超了就拒绝） |
+| **LimitRange** | `limits` | 限制命名空间内单个 Pod/容器的资源上下限 |
+| **PriorityClass** | `pc` | 定义 Pod 调度优先级 |
+
+### 六、调度与自动伸缩 (Scheduling & Autoscaling)
+
+| 资源 | 简称 | 用途 |
+|------|------|------|
+| **HorizontalPodAutoscaler** | `hpa` | 根据 CPU/内存/自定义指标自动扩缩 Pod 副本数 |
+| **VerticalPodAutoscaler** | `vpa` | 自动调整 Pod 的资源请求和限制 |
+| **PodDisruptionBudget** | `pdb` | 限制自愿中断时最少可用的 Pod 数量（保护下限） |
+
+### 七、自定义与扩展 (Custom Resources)
+
+| 资源 | 用途 |
+|------|------|
+| **CustomResourceDefinition** (`crd`) | 定义自定义资源类型 |
+| **MutatingWebhookConfiguration** | 修改资源准入 Webhook |
+| **ValidatingWebhookConfiguration** | 验证资源准入 Webhook |
+
+### 常用简写速查
+
+```
+po     → Pod          svc  → Service       cm   → ConfigMap
+deploy → Deployment   ing  → Ingress       pvc  → PersistentVolumeClaim
+rs     → ReplicaSet   ns   → Namespace     sc   → StorageClass
+sts    → StatefulSet  sa   → ServiceAccount quota→ ResourceQuota
+ds     → DaemonSet    netpol→NetworkPolicy  pdb  → PodDisruptionBudget
+cj     → CronJob       ep   → Endpoints     hpa  → HorizontalPodAutoscaler
+```
+
+---
+
+## 附 C：用你的 smart-invest 项目验证原理
 
 现在你可以用你已经部署的 K3S 环境验证上面的原理。
 
