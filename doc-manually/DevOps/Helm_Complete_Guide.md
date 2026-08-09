@@ -1,7 +1,7 @@
 # Helm Complete Guide
 
 > 从「为什么需要 Helm」到「Helm3 完整工作原理」——以 smart-invest 项目为实战示例
->
+> 
 > 读者定位：资深 Java 开发工程师，熟悉 Maven/Gradle、Spring Boot、Docker、K8S 基础概念
 
 ---
@@ -42,13 +42,13 @@ Matt Butcher（Helm 创始人之一，Deis 公司工程师）在 2015 年发现�
 
 他的设计目标很明确：
 
-| 设计目标 | 类比（Java 世界） |
-|----------|-------------------|
-| 把一组 K8S YAML 打包成一个可复用的单元 | Maven 把 .java 编译打包成 .jar |
-| 支持参数化部署（同一套 YAML，不同环境不同值） | `application-{profile}.yml` |
-| 支持版本管理和回滚 | Maven SNAPSHOT / Release 版本 + 回滚到旧版 |
-| 支持依赖管理（Chart A 依赖 Chart B） | pom.xml 的 `<dependency>` |
-| 支持仓库分发（Chart 存到远程，其他人 `helm install`） | Maven Central / Nexus |
+| 设计目标                                  | 类比（Java 世界）                         |
+| ------------------------------------- | ----------------------------------- |
+| 把一组 K8S YAML 打包成一个可复用的单元              | Maven 把 .java 编译打包成 .jar            |
+| 支持参数化部署（同一套 YAML，不同环境不同值）             | `application-{profile}.yml`         |
+| 支持版本管理和回滚                             | Maven SNAPSHOT / Release 版本 + 回滚到旧版 |
+| 支持依赖管理（Chart A 依赖 Chart B）            | pom.xml 的 `<dependency>`            |
+| 支持仓库分发（Chart 存到远程，其他人 `helm install`） | Maven Central / Nexus               |
 
 ### 1.3 Helm 名称的由来
 
@@ -60,33 +60,33 @@ Matt Butcher（Helm 创始人之一，Deis 公司工程师）在 2015 年发现�
 
 #### 核心概念对照表
 
-| 概念 | APT（OS 层包管理器） | Helm（K8S 层包管理器） |
-|------|---------------------|------------------------|
-| **包格式** | `.deb` 二进制包 | Chart（tarball 打包的 K8S 资源 + 模板） |
-| **仓库元数据** | `/var/lib/apt/lists/`（`apt update` 下载的索引） | `helm repo update` 下载的 `index.yaml` |
-| **安装** | `apt install nginx` | `helm install my-release nginx/` |
-| **升级** | `apt upgrade` | `helm upgrade` |
-| **卸载** | `apt remove` / `apt purge` | `helm uninstall` |
-| **已安装状态存储** | dpkg 数据库（`/var/lib/dpkg/status` 文本文件） | K8S Secrets（每个 revision 一个对象） |
-| **依赖解析** | 递归解析依赖树，检测冲突 | `Chart.yaml` 里的 `dependencies` + `Chart.lock` |
-| **生命周期钩子** | `preinst` / `postinst` / `prerm` / `postrm` 脚本 | Helm hooks（`pre-install`、`post-upgrade` 等） |
-| **完整性校验** | GPG 签名 + SHA256 哈希 | Provenance 签名 + `helm verify` |
-| **版本锁定** | `apt-mark hold` | `Chart.lock` + version constraints |
-| **搜索** | `apt search nginx` | `helm search hub nginx` |
+| 概念          | APT（OS 层包管理器）                                  | Helm（K8S 层包管理器）                               |
+| ----------- | ---------------------------------------------- | --------------------------------------------- |
+| **包格式**     | `.deb` 二进制包                                    | Chart（tarball 打包的 K8S 资源 + 模板）                |
+| **仓库元数据**   | `/var/lib/apt/lists/`（`apt update` 下载的索引）      | `helm repo update` 下载的 `index.yaml`           |
+| **安装**      | `apt install nginx`                            | `helm install my-release nginx/`              |
+| **升级**      | `apt upgrade`                                  | `helm upgrade`                                |
+| **卸载**      | `apt remove` / `apt purge`                     | `helm uninstall`                              |
+| **已安装状态存储** | dpkg 数据库（`/var/lib/dpkg/status` 文本文件）          | K8S Secrets（每个 revision 一个对象）                 |
+| **依赖解析**    | 递归解析依赖树，检测冲突                                   | `Chart.yaml` 里的 `dependencies` + `Chart.lock` |
+| **生命周期钩子**  | `preinst` / `postinst` / `prerm` / `postrm` 脚本 | Helm hooks（`pre-install`、`post-upgrade` 等）    |
+| **完整性校验**   | GPG 签名 + SHA256 哈希                             | Provenance 签名 + `helm verify`                 |
+| **版本锁定**    | `apt-mark hold`                                | `Chart.lock` + version constraints            |
+| **搜索**      | `apt search nginx`                             | `helm search hub nginx`                       |
 
 #### APT 在背后做了什么（不只是下载）
 
 APT 远不止"下载软件包"，它是一个完整的**包生命周期管理工具**。每次 `apt install nginx` 背后：
 
-| 步骤 | 做什么 |
-|------|--------|
-| **依赖解析** | 递归解析依赖树，检查已安装版本，检测依赖冲突（如 A 要 libX v1，B 要 libX v2——APT 会报错） |
-| **仓库元数据管理** | `apt update` 从仓库下载索引文件到 `/var/lib/apt/lists/`，让安装决策完全在本地完成 |
-| **完整性验证** | GPG 签名验证（确认包来自信任的仓库）+ SHA256 哈希校验 |
+| 步骤          | 做什么                                                          |
+| ----------- | ------------------------------------------------------------ |
+| **依赖解析**    | 递归解析依赖树，检查已安装版本，检测依赖冲突（如 A 要 libX v1，B 要 libX v2——APT 会报错）   |
+| **仓库元数据管理** | `apt update` 从仓库下载索引文件到 `/var/lib/apt/lists/`，让安装决策完全在本地完成   |
+| **完整性验证**   | GPG 签名验证（确认包来自信任的仓库）+ SHA256 哈希校验                            |
 | **维护者脚本执行** | `preinst`→ 解压 → `postinst`（如创建系统用户、启动 systemd 服务、`ldconfig`） |
-| **并发安全** | 文件锁（`/var/lib/dpkg/lock`）保证同一时间只有一个 apt 实例运行 |
-| **事务性安装** | 先规划完整计划 → 并行下载 → 按依赖顺序解包配置 → 失败则回滚 |
-| **自动清理** | `autoremove` 追踪孤儿依赖，清理旧内核 |
+| **并发安全**    | 文件锁（`/var/lib/dpkg/lock`）保证同一时间只有一个 apt 实例运行                 |
+| **事务性安装**   | 先规划完整计划 → 并行下载 → 按依赖顺序解包配置 → 失败则回滚                           |
+| **自动清理**    | `autoremove` 追踪孤儿依赖，清理旧内核                                    |
 
 #### Helm 在 APT 之上的三个"超能力"
 
@@ -123,7 +123,7 @@ APT 没有原生的回滚机制，只能手动指定版本：`apt install nginx=
 #### 一句话总结
 
 > **Helm = 搬用了 APT 的包管理心智模型（仓库、依赖、钩子、版本化），但在上面叠加了 K8S 原生概念——模板化、release 实例化、声明式配置、历史回滚。**
->
+> 
 > 如果只用 `apt install nginx` 来类比，你只看到了 Helm 的 30%。完整的类比是：**APT 的仓库 + dpkg 的安装 + CloudFormation 的模板 + Docker 的实例化 ≈ Helm**
 
 ---
@@ -133,7 +133,7 @@ APT 没有原生的回滚机制，只能手动指定版本：`apt install nginx=
 ### 2.1 最常见的一个误解
 
 > ❌ "Helm 是 K8S 版的 Terraform，所以有 Helm 就不需要 Terraform 了。"
->
+> 
 > ✅ "Terraform 管基础设施（IaaS），Helm 管 K8S 内部应用（PaaS/SaaS）。它们是互补的上下层关系。"
 
 ### 2.2 清晰的层次划分
@@ -180,18 +180,18 @@ APT 没有原生的回滚机制，只能手动指定版本：`apt install nginx=
 
 ### 2.3 详细对比表
 
-| 维度 | Terraform | Helm |
-|------|-----------|------|
-| **管理对象** | 云资源（VM、网络、数据库、DNS...） | K8S 内部资源（Pod、Service、Ingress...） |
-| **目标 API** | AWS/GCP/Azure API | K8S API Server |
-| **状态存储** | State file（本地或 S3/DynamoDB 等远端） | K8S Secret（集群内） |
-| **语言** | HCL（HashiCorp Configuration Language） | Go Template + YAML |
-| **声明式** | ✅ 声明目标状态 | ✅ 声明目标状态 |
-| **依赖管理** | `depends_on` / 模块引用 | Chart dependencies + conditions |
-| **回滚** | 通过 state file 恢复到上一版本 | `helm rollback` 原生支持 |
-| **模块/包分发** | Terraform Registry | Helm Repository / OCI Registry |
-| **生命周期** | create → plan → apply → destroy | install → upgrade → rollback → uninstall |
-| **典型用户** | DevOps / 平台工程师 | 应用开发者 / 发布工程师 |
+| 维度         | Terraform                             | Helm                                     |
+| ---------- | ------------------------------------- | ---------------------------------------- |
+| **管理对象**   | 云资源（VM、网络、数据库、DNS...）                 | K8S 内部资源（Pod、Service、Ingress...）         |
+| **目标 API** | AWS/GCP/Azure API                     | K8S API Server                           |
+| **状态存储**   | State file（本地或 S3/DynamoDB 等远端）       | K8S Secret（集群内）                          |
+| **语言**     | HCL（HashiCorp Configuration Language） | Go Template + YAML                       |
+| **声明式**    | ✅ 声明目标状态                              | ✅ 声明目标状态                                 |
+| **依赖管理**   | `depends_on` / 模块引用                   | Chart dependencies + conditions          |
+| **回滚**     | 通过 state file 恢复到上一版本                 | `helm rollback` 原生支持                     |
+| **模块/包分发** | Terraform Registry                    | Helm Repository / OCI Registry           |
+| **生命周期**   | create → plan → apply → destroy       | install → upgrade → rollback → uninstall |
+| **典型用户**   | DevOps / 平台工程师                        | 应用开发者 / 发布工程师                            |
 
 ### 2.4 实际协作流程（smart-invest 为例）
 
@@ -456,6 +456,7 @@ Helm2 架构:
 ```
 
 Tiller 的职责：
+
 - 接收 helm CLI 的请求
 - 渲染模板
 - 与 K8S API Server 交互（创建/更新/删除资源）
@@ -605,25 +606,28 @@ K8S Manifest   = 更泛指的用法——任何手写的 Deployment/Service YAML
 
 ##### Java MANIFEST.MF vs Helm Manifest 对比
 
-| | Java MANIFEST.MF | Helm Release Manifest |
-|------|------|------|
-| **位置** | `META-INF/MANIFEST.MF`（在 `.jar` 包内部） | Helm Release Secret（在 etcd/K8S 中） |
-| **内容** | Jar 包元数据：入口类、版本、依赖 | 完整 K8S 资源定义（Deployment + Service + ...） |
-| **什么时候生成** | 构建时（`jar` 命令自动生成） | 部署渲染时（`helm install/upgrade` 执行 `helm template`） |
-| **发布后可变吗？** | 不会主动变（jar 打好就是固定的） | 每次 `helm upgrade` 生成新的 manifest |
-| **读它的命令** | `unzip -p xxx.jar META-INF/MANIFEST.MF` | `helm get manifest <release>` |
+|             | Java MANIFEST.MF                        | Helm Release Manifest                            |
+| ----------- | --------------------------------------- | ------------------------------------------------ |
+| **位置**      | `META-INF/MANIFEST.MF`（在 `.jar` 包内部）    | Helm Release Secret（在 etcd/K8S 中）                |
+| **内容**      | Jar 包元数据：入口类、版本、依赖                      | 完整 K8S 资源定义（Deployment + Service + ...）          |
+| **什么时候生成**  | 构建时（`jar` 命令自动生成）                       | 部署渲染时（`helm install/upgrade` 执行 `helm template`） |
+| **发布后可变吗？** | 不会主动变（jar 打好就是固定的）                      | 每次 `helm upgrade` 生成新的 manifest                  |
+| **读它的命令**   | `unzip -p xxx.jar META-INF/MANIFEST.MF` | `helm get manifest <release>`                    |
 
 ##### 具体例子
 
 **Java 的 MANIFEST.MF：**
+
 ```
 Manifest-Version: 1.0
 Main-Class: com.example.App
 Class-Path: lib/dep1.jar lib/dep2.jar
 ```
+
 它声明："这个 jar 的入口在哪、依赖哪些外部 jar"——JVM 启动时读取这份清单，知道从哪里开始执行。
 
 **Helm 的 manifest（`helm get manifest smart-invest` 的输出）：**
+
 ```yaml
 ---
 # Source: smart-invest/templates/secret.yaml
@@ -647,6 +651,7 @@ apiVersion: v1
 kind: Service
 ...
 ```
+
 它声明："这次部署应该包含这些 K8S 资源、各自的具体配置是什么"——K8S API Server 按这份清单创建/更新集群资源。
 
 ##### 为什么不是巧合
@@ -663,12 +668,12 @@ kind: Service
 
 把这个定义拆开，每一层都不是多余的：
 
-| 组成部分 | 含义 | 类比 |
-|---------|------|------|
-| **Chart** | 模板 + 默认 values + 元数据 | Maven 的 pom.xml + src/ |
-| **Values** | 环境特定的参数覆盖 | Spring Boot 的 `application-{profile}.yml` |
-| **部署操作** | install / upgrade / rollback | 触发部署的动作 |
-| **集群状态快照** | 渲染后的 manifest + 最终 values + 操作描述 | 一次 Maven build 的记录 |
+| 组成部分       | 含义                               | 类比                                        |
+| ---------- | -------------------------------- | ----------------------------------------- |
+| **Chart**  | 模板 + 默认 values + 元数据             | Maven 的 pom.xml + src/                    |
+| **Values** | 环境特定的参数覆盖                        | Spring Boot 的 `application-{profile}.yml` |
+| **部署操作**   | install / upgrade / rollback     | 触发部署的动作                                   |
+| **集群状态快照** | 渲染后的 manifest + 最终 values + 操作描述 | 一次 Maven build 的记录                        |
 
 ##### Release 不是"安装一次就完了"——它是一个有生命周期的对象
 
@@ -708,14 +713,14 @@ helm uninstall smart-invest              # 删除 Release（清理所有 revisio
 
 Release 之于 Helm，类似于 Git Commit 之于 Git：
 
-| | Git | Helm |
-|------|-----|------|
-| 基本单位 | Commit（一次快照） | Revision（一次部署快照） |
-| 链 | 所有 commit 组成历史链 | 所有 revision 组成 Release |
-| 回滚 | `git reset --hard <sha>` | `helm rollback <revision>` |
-| 存储 | `.git/objects/`（blob + tree） | K8S Secret（每个 revision 一个） |
-| 内容 | 文件快照 + commit message | 渲染后的 manifest + values + description |
-| 不可变？ | ✅ commit 不可变 | ✅ revision 不可变（旧 Secret 不被修改，只标记 superseded） |
+|      | Git                          | Helm                                         |
+| ---- | ---------------------------- | -------------------------------------------- |
+| 基本单位 | Commit（一次快照）                 | Revision（一次部署快照）                             |
+| 链    | 所有 commit 组成历史链              | 所有 revision 组成 Release                       |
+| 回滚   | `git reset --hard <sha>`     | `helm rollback <revision>`                   |
+| 存储   | `.git/objects/`（blob + tree） | K8S Secret（每个 revision 一个）                   |
+| 内容   | 文件快照 + commit message        | 渲染后的 manifest + values + description         |
+| 不可变？ | ✅ commit 不可变                 | ✅ revision 不可变（旧 Secret 不被修改，只标记 superseded） |
 
 每次 `git commit` 产生一个不可变的 snapshot，每次 `helm upgrade` 也产生一个不可变的 revision snapshot。**Release 不是某一个 revision，而是从 revision 1 到 revision N 的整个历史**——就像 branch 不是某一个 commit，而是从初始 commit 到 HEAD 的整个历史。
 
@@ -730,6 +735,7 @@ REVISION  STATUS      DESCRIPTION
 ```
 
 `helm rollback smart-invest 17` 不是把指针回退到 revision 17，而是：
+
 1. 读取 revision 17 的 Secret 中保存的 manifest
 2. 把那份 manifest 重新 apply 到集群
 3. 创建一个**新的 revision**（v19），其 `info.description = "Rollback to 17"`
@@ -816,13 +822,13 @@ data:
 
 **类比：etcd 之于 K8S = `/var/lib/dpkg/` 之于 APT**
 
-| | APT | Helm / K8S |
-|------|-----|------------|
-| 状态存储 | `/var/lib/dpkg/status`（磁盘上的文本文件） | etcd（分布式 KV 存储，Raft 共识） |
-| 查看方式 | `cat /var/lib/dpkg/status` | `kubectl get secret ... -o yaml` |
-| 数据格式 | 自定义文本格式（`Package:`、`Status:` 等） | Protobuf/JSON → YAML 序列化输出 |
-| 能否直接编辑？ | ✅ `vim`（但不建议） | ✅ `kubectl edit secret`（更不建议） |
-| 一致性保证 | 无 | Raft 共识（多节点一致） |
+|         | APT                              | Helm / K8S                       |
+| ------- | -------------------------------- | -------------------------------- |
+| 状态存储    | `/var/lib/dpkg/status`（磁盘上的文本文件） | etcd（分布式 KV 存储，Raft 共识）          |
+| 查看方式    | `cat /var/lib/dpkg/status`       | `kubectl get secret ... -o yaml` |
+| 数据格式    | 自定义文本格式（`Package:`、`Status:` 等）  | Protobuf/JSON → YAML 序列化输出       |
+| 能否直接编辑？ | ✅ `vim`（但不建议）                    | ✅ `kubectl edit secret`（更不建议）    |
+| 一致性保证   | 无                                | Raft 共识（多节点一致）                   |
 
 **一句话：不存在"YAML 文件存储在磁盘某处"这种事——YAML 只是 API 给你的翻译，etcd 是 K8S 唯一的真实数据库。**
 
@@ -856,12 +862,12 @@ kubectl get secret sh.helm.release.v1.smart-invest.v3 -n smart-invest \
 
 #### 5.3.3 Helm 2 vs Helm 3 存储对比
 
-| | Helm 2 | Helm 3 |
-|------|--------|--------|
-| 存储后端 | ConfigMap（默认）或 Secret | **只有 Secret** |
-| 命名位置 | `kube-system` namespace | release 所在的 namespace |
-| 存储驱动 | Tiller（集群内 gRPC 服务） | 无 Tiller，Helm CLI 直接调用 K8S Secret API |
-| RBAC(Role-Based Access Control) | Tiller 有自己的权限体系 | 继承当前用户的 kubeconfig RBAC(Role-Based Access Control) |
+|                                 | Helm 2                  | Helm 3                                             |
+| ------------------------------- | ----------------------- | -------------------------------------------------- |
+| 存储后端                            | ConfigMap（默认）或 Secret   | **只有 Secret**                                      |
+| 命名位置                            | `kube-system` namespace | release 所在的 namespace                              |
+| 存储驱动                            | Tiller（集群内 gRPC 服务）     | 无 Tiller，Helm CLI 直接调用 K8S Secret API              |
+| RBAC(Role-Based Access Control) | Tiller 有自己的权限体系         | 继承当前用户的 kubeconfig RBAC(Role-Based Access Control) |
 
 Helm 3 去掉了 Tiller 后，`helm` 命令行直接通过 K8S API 读写 Secret——不需要任何集群端组件，也不再有 Tiller 那个"超级权限"的 RBAC 问题。
 
@@ -1151,6 +1157,7 @@ imagePullSecrets:
 ### 7.5 白名单与安全限制
 
 Helm3 模板不能：
+
 - 访问文件系统（`.Files.Get` 只能读 chart 内部文件）
 - 访问网络
 - 执行系统命令
@@ -1183,9 +1190,9 @@ Tiller 是单点故障              无单点问题
 
 **Q3: `--wait` 和 `--atomic` 的区别？**
 
-| flag | 行为 |
-|------|------|
-| `--wait` | 等待所有资源 Ready，超时就标记 failed，**但不回滚** |
+| flag       | 行为                                          |
+| ---------- | ------------------------------------------- |
+| `--wait`   | 等待所有资源 Ready，超时就标记 failed，**但不回滚**          |
 | `--atomic` | 等待所有资源 Ready，超时或失败 → **自动 rollback 到上一个版本** |
 
 **Q4: Helm 的 values 合并顺序？**
@@ -1200,6 +1207,7 @@ Tiller 是单点故障              无单点问题
 Umbrella Chart（聚合 Chart）是一个父 Chart，通过 `dependencies` 引用多个子 Chart。
 
 优点：
+
 - 一条命令部署整个系统
 - 统一管理公共配置（如 global.imageTag）
 - 子 Chart 可独立发布和回滚
@@ -1341,7 +1349,7 @@ REVISION  STATUS      CHART              APP VERSION  DESCRIPTION
 
 ### 9.2 历史解读
 
-````
+```
 REVISION 1-5 (v0.1.0):
   初始部署，遇到各种问题（Postgres 连接、镜像拉取超时），
   4 次失败后最终成功。每次失败都是一次真实的 debug 过程。
@@ -1365,7 +1373,7 @@ REVISION 19 (当前):
   回滚到 REVISION 17。
   注意：REVISION 没有 18 和 20——rev 18 是失败的 rollback 尝试
   （被清理了），rev 19 就是当前的部署状态。
-````
+```
 
 ### 9.3 常用命令速查
 
