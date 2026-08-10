@@ -14,7 +14,17 @@ dist/
 /doc-design/Smart_invest_Develop_prompt_v2.txt
 /doc-design/Smart_invest_Develop_prompt_v3_minimx.txt
 
-#For Python venv
+# Terraform — 敏感变量文件不提交
+infrastructure/terraform/live/prod/terraform.tfvars
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl
+
+# Helm — 打包的 Chart 不提交（通过 helm dependency update 下载）
+infrastructure/helm/umbrella/charts/*.tgz
+
+# Python venv（已删除，后续忽略）
 venv/
 2026-04-08-aws-deployment-plan-aa.md
 2026-04-08-aws-deployment-plan-prototype.md

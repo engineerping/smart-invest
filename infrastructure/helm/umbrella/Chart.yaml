@@ -1,0 +1,131 @@
+# ==============================================================================
+# 📦 Chart.yaml —— Helm Chart 的"身份证明"和"依赖清单"
+# ==============================================================================
+#
+# Helm 工作流中 Chart.yaml 的位置：
+#   helm install smart-invest ./umbrella/ --namespace smart-invest
+#     │
+#     ├── ① 读取 Chart.yaml → 知道 Chart 叫什么、版本号、依赖谁
+#     ├── ② 读取 values.yaml → 拿到默认配置
+#     ├── ③ 解析 dependencies → 加载子 Chart（charts/ 或远程仓库）
+#     ├── ④ 加载 templates/ → 把所有 .yaml 模板文件读入内存
+#     ├── ⑤ 合并 Values（5 层合并，见 values.yaml 注释）
+#     ├── ⑥ 渲染模板 → {{ .Values.xxx }} 被替换成实际值
+#     ├── ⑦ 排序资源 → Secret → ConfigMap → Service → Deployment → Ingress
+#     ├── ⑧ 执行 Hook → pre-install/post-install 等 Job
+#     ├── ⑨ 创建 K8S 资源 → 逐个 apply 到集群
+#     └── ⑩ 存储 Release → 在 namespace 下创建 Secret 记录部署信息
+#
+# ==============================================================================
+# Umbrella Chart 模式（工业界最佳实践）
+# ==============================================================================
+# 每个微服务是一个独立的子 Chart（可以单独发布/回滚/扩缩容），
+# 再用一个"聚合 Chart"（umbrella）通过 dependencies 把所有子 Chart 串起来。
+#
+# 好处：
+#   - 一键部署全家桶：helm install smart-invest ./umbrella/
+#   - 独立发布：helm upgrade user-service ./charts/user-service/
+#   - 独立回滚：helm rollback user-service 1
+#   - 独立扩缩容：kubectl scale deployment/user-service --replicas=3
+#
+# 类比 Java：
+#   umbrella = Maven 多模块项目的根 pom.xml（<packaging>pom</packaging>）
+#   子 Chart  = 各个 module 的 pom.xml
+# ==============================================================================
+
+# ─── apiVersion：声明 Chart 格式版本 ───
+# v2 = Helm 3 格式（Helm 2 用 v1，已淘汰，现在都是 v2）
+apiVersion: v2
+
+# ─── name：Chart 名称 ───
+# 相当于 Maven 的 <artifactId>。这个名称会被用于：
+#   1. 资源的默认名称前缀（如 Deployment 名 = <release-name>-<chart-name>）
+#   2. helm list 显示的 CHART 列
+#   3. helm history 中 CHART 列的值
+name: smart-invest
+
+# ─── description：纯文档字段 ───
+# helm search 时会显示，类比 Maven 的 <description>
+description: Smart Invest 微服务全家桶聚合 Chart（一键部署整套系统）
+
+# ─── type：Chart 类型 ───
+# application = 部署应用的 Chart（99% 的场景）
+# library    = 库 Chart，只提供模板函数，不产生 K8S 资源
+type: application
+
+# ─── version：Chart 自身的版本 ───
+# 每当你修改了模板、values、依赖关系，就应该升这个版本。
+# 类比 Maven 的 <version>（jar 包的版本，不是 jar 里应用的版本）
+version: 1.0.0
+
+# ─── appVersion：应用版本 ───
+# 这 个 Chart 部 署 的 应 用 版 本（通 常 是 镜 像 tag）。
+# 它是元数据标签，不影响模板渲染，只是给人看的。
+# 你在 helm history 的 APP VERSION 列看到的就是这个值。
+# 类比 Docker 镜像的 tag
+appVersion: "1.0.0"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# dependencies —— Helm 的依赖管理（类比 Maven 的 <dependencies>）
+# ═════════════════════════════════════════════════════════════════════════════
+#
+# Helm 依赖解析流程：
+#   1. 你在 Chart.yaml 声明 dependencies
+#   2. 运行 helm dependency update → Helm 下载子 Chart 的 .tgz 到 charts/ 目录
+#   3. 同时生成 Chart.lock → 锁定子 Chart 的精确版本 + 哈希（类比 package-lock.json）
+#   4. helm install → Helm 自动加载 charts/ 下的子 Chart
+#
+# file:// 和 https:// 的区别：
+#   file://  → 引用本地路径（子 Chart 在同一 Git 仓库中，适合微服务项目）
+#   https:// → 引用远程 Helm 仓库（如 Bitnami 的 Redis，适合第三方中间件）
+#
+# condition 字段：
+#   关联 values.yaml 中的 boolean，控制是否安装这个依赖。
+#   例如 condition: redis.enabled → values 里 redis.enabled: false → 跳过安装。
+#   适合"可选依赖"场景。
+# ═════════════════════════════════════════════════════════════════════════════
+
+dependencies:
+  # ─── 每个依赖的三要素 ───
+  # name: 子 Chart 的名字（必须与子 Chart 自己的 Chart.yaml 中的 name 一致！）
+  # version: 版本约束（语义化版本，如 1.0.0 或 >=1.0.0 <2.0.0）
+  # repository: 从哪里下载（file:// 本地路径 或 https:// 远程仓库 URL）
+
+  # ─── 自定义微服务（file:// 本地路径）───
+  - name: user-service
+    version: 1.0.0
+    repository: "file://../charts/user-service"
+
+  - name: fund-service
+    version: 1.0.0
+    repository: "file://../charts/fund-service"
+
+  - name: order-service
+    version: 1.0.0
+    repository: "file://../charts/order-service"
+
+  - name: notification-worker
+    version: 1.0.0
+    repository: "file://../charts/notification-worker"
+
+  - name: api-gateway
+    version: 1.0.0
+    repository: "file://../charts/api-gateway"
+
+  - name: frontend
+    version: 1.0.0
+    repository: "file://../charts/frontend"
+
+  - name: rabbitmq
+    version: 1.0.0
+    repository: "file://../charts/rabbitmq"
+
+  # ─── 第三方中间件（https:// 远程仓库）───
+  # 使用方式：
+  #   1. helm repo add bitnami https://charts.bitnami.com/bitnami
+  #   2. helm dependency update
+  #   3. condition 控制是否安装（values 里 redis.enabled: true/false）
+  - name: redis
+    version: 21.0.0
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled

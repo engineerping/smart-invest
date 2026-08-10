@@ -1,0 +1,158 @@
+# ==============================================================================
+# 📋 values.yaml —— Helm Chart 的"默认配置"，类比 Spring Boot 的 application.yml
+# ==============================================================================
+#
+# Values 合并优先级（5 层，从低到高，后面的覆盖前面的）：
+#   Layer 1: 子 Chart 内置 values.yaml          (默认值，最低优先级)
+#   Layer 2: 父 Chart（本文件）中的子 Chart 配置  (覆盖子 Chart 同名配置)
+#   Layer 3: -f 指定的外部 values 文件           (如 values-prod.yaml)
+#   Layer 4: --set 命令行参数                    (如 --set image.tag=v2)
+#   Layer 5: --set-string / --set-file           (强制字符串/文件注入)
+#
+# 类比 Java/Spring Boot：
+#   values.yaml            = application.yml 的默认值
+#   -f values-prod.yaml    = spring.profiles.active=prod
+#   --set image.tag=v2     = 命令行 --spring.datasource.url=xxx
+#
+# ==============================================================================
+# 关于 fullnameOverride 的说明
+# ==============================================================================
+# 子 Chart 配置中设置 fullnameOverride（固定资源名称），而不是让 Helm 自动生成
+# <release-name>-<chart-name> 这种带前缀的名称，原因是：
+#
+# K8S 服务发现依赖固定的 DNS 名称：
+#   order-service 内部调用 http://user-service:8081/api/users
+#   ↑ 这里的 "user-service" 就是 K8S Service 名，也是集群内 DNS 名
+#
+# 如果不固定名称，每次 helm install 用不同的 release name，
+# Service 名称就会变，其他服务就找不到它了。
+# ==============================================================================
+
+# ═════════════════════════════════════════════════════════════════════════════
+# global —— 跨所有子 Chart 共享的配置
+# ═════════════════════════════════════════════════════════════════════════════
+# Helm 约定：global 下的值会自动注入到每个子 Chart 的 .Values.global 中，
+# 子 Chart 模板中可以通过 {{ .Values.global.xxx }} 引用。
+# 这样就不需要在每个子 Chart 下重复写相同的配置。
+global:
+  imageTag: "1.0.0"              # 所有微服务统一镜像版本（CI/CD 部署时会传入实际 tag）
+  imagePullPolicy: IfNotPresent  # 镜像拉取策略：本地有就用，没有才拉（K3S 手动导入场景）
+
+# ═════════════════════════════════════════════════════════════════════════════
+# secrets —— 敏感配置（K8S Secret）
+# ═════════════════════════════════════════════════════════════════════════════
+# ⚠️ 这里的值是演示明文。生产环境安全最佳实践：
+#   1. SealedSecret：加密后可以安全存入 Git
+#   2. ExternalSecret：从 Vault / AWS Secrets Manager 同步到 K8S
+#   3. helm install -f secrets-prod.yaml（secrets 文件不提交到 Git）
+#   4. CI/CD 中从环境变量注入：--set secrets.dbPassword=$DB_PASSWORD
+#
+# 这些值最终会被 umbrella/templates/secret.yaml 用 b64enc 转成 Base64。
+# 注意：K8S Secret 的 Base64 只是编码，不是加密！任何人拿到 Base64 都能解码。
+secrets:
+  dbPassword: "localdev_only"                                         # 数据库密码
+  jwtSecret: "smartinvest-demo-secret-key-change-me-please-32bytes"   # JWT 签名密钥（至少 32 字节）
+  rabbitmqPassword: "localdev_only"                                   # RabbitMQ 密码
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 子 Chart 配置 —— 每个微服务一段，key = 子 Chart 名
+# ═════════════════════════════════════════════════════════════════════════════
+# 父 Chart 中的配置会覆盖子 Chart 自己的 values.yaml 中的同名配置。
+# 所以父 Chart 是"总控面板"——统一调参数，不用一个个改子 Chart。
+
+# ─── user-service：用户与认证微服务 ───
+user-service:
+  replicaCount: 1                      # 副本数（演示环境 1 副本，生产建议 ≥ 2）
+  fullnameOverride: user-service       # 固定 Service 名称（方便其他微服务调用）
+  image:
+    repository: gongchengship/smart-invest-user-service
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+
+# ─── fund-service：基金数据微服务 ───
+fund-service:
+  replicaCount: 1
+  fullnameOverride: fund-service
+  image:
+    repository: gongchengship/smart-invest-fund-service
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+
+# ─── order-service：订单交易微服务 ───
+order-service:
+  replicaCount: 1
+  fullnameOverride: order-service
+  image:
+    repository: gongchengship/smart-invest-order-service
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+
+# ─── notification-worker：通知消费者（后台 Worker）───
+notification-worker:
+  replicaCount: 1
+  fullnameOverride: notification-worker
+  image:
+    repository: gongchengship/smart-invest-notification-worker
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+
+# ─── api-gateway：API 网关（前端 → 后端的入口）───
+api-gateway:
+  replicaCount: 1
+  fullnameOverride: api-gateway
+  service:
+    type: NodePort                   # 用 NodePort 对外暴露（K3S 上没有 LoadBalancer）
+    port: 8080
+    nodePort: 30080                  # 固定 NodePort（方便 CloudFront 回源配置）
+  image:
+    repository: gongchengship/smart-invest-api-gateway
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+
+# ─── frontend：前端 SPA 应用 ───
+frontend:
+  replicaCount: 1
+  fullnameOverride: frontend
+  image:
+    repository: gongchengship/smart-invest-frontend
+    tag: "1.0.0"
+    pullPolicy: IfNotPresent
+
+# ─── rabbitmq：消息队列（本地部署）───
+rabbitmq:
+  replicaCount: 1
+  fullnameOverride: rabbitmq
+  service:
+    port: 5672                       # AMQP 协议端口
+    managementPort: 15672             # RabbitMQ 管理控制台端口
+  persistence:
+    enabled: true                     # 持久化消息数据（Pod 重启不丢消息）
+    size: 5Gi                         # 持久卷大小
+  rabbitmq:
+    username: smartmq
+    defaultPass: localdev_only
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 可选依赖的条件开关
+# ═════════════════════════════════════════════════════════════════════════════
+# 配合 Chart.yaml 中的 condition: redis.enabled
+# true → 安装 Redis 依赖 / false → 跳过
+redis:
+  enabled: false                     # 默认不装 Redis（暂时不需要）
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Helm Install / Upgrade 建议参数
+# ═════════════════════════════════════════════════════════════════════════════
+# 部署命令建议：
+#   helm upgrade --install smart-invest ./umbrella/ \
+#     --namespace smart-invest --create-namespace \
+#     --atomic --timeout 600s
+#
+# --upgrade --install：不存在就创建，已存在就升级（最常用）
+# --atomic：失败自动 rollback（比 --wait 更安全）
+# --timeout 600s：10 分钟超时（足够拉镜像 + 启动 + Hook 检查完成）
+#
+# K3S 特别说明：
+#   如果内网拉 Docker Hub 镜像受限（如华硕 K3S 环境），
+#   先手动 import 镜像后再 helm install。
+#   参考文档：k3s-image-import-workflow

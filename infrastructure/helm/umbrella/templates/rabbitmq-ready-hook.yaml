@@ -1,0 +1,97 @@
+# ==============================================================================
+# 🪝 RabbitMQ Ready Hook —— 部署前检查 RabbitMQ 是否就绪
+# ==============================================================================
+#
+# Helm Hook 是什么：
+#   Hook 是在 Release 生命周期的特定阶段执行的"一次性动作"。
+#   不是 K8S 的常驻资源（Pod/Deployment），而是一个 Job，跑完就退出。
+#
+# Hook 的典型用途：
+#   - pre-install：创建必需的 ConfigMap/Secret、检查前置条件
+#   - post-install：数据库迁移、初始化数据
+#   - pre-upgrade：备份数据库
+#   - post-upgrade：清理旧资源
+#   - pre-delete：通知外部系统
+#
+# 这个 Hook 的作用：
+#   在部署微服务之前，检查 RabbitMQ 是否已经启动并接受连接。
+#   如果 RabbitMQ 没起来 → Hook 失败 → helm install 失败 → 不会继续部署其他微服务。
+#   防止微服务启动后发现连不上 RabbitMQ 而反复 CrashLoopBackOff。
+#
+# 配合 --atomic --timeout 600s：
+#   helm install smart-invest ./umbrella/ --atomic --timeout 600s
+#   --atomic：Hook 失败 → 自动 rollback 整个过程
+#   --timeout：给 RabbitMQ 最多 600 秒来启动
+# ==============================================================================
+
+apiVersion: batch/v1
+kind: Job
+
+metadata:
+  name: {{ .Release.Name }}-rabbitmq-ready-check
+  labels:
+    app.kubernetes.io/name: smart-invest
+    app.kubernetes.io/part-of: smart-invest
+
+  annotations:
+    # ─── "helm.sh/hook": pre-install,pre-upgrade ───
+    # 告诉 Helm："这个资源不是普通的 K8S 资源，是 Hook"
+    # pre-install：helm install 时执行
+    # pre-upgrade：helm upgrade 时也执行
+    "helm.sh/hook": pre-install,pre-upgrade
+
+    # ─── "helm.sh/hook-weight": "5" ───
+    # Hook 执行顺序（数字越小越先执行）。
+    # 如果有多个 Hook，按 weight 排序。
+    "helm.sh/hook-weight": "5"
+
+    # ─── "helm.sh/hook-delete-policy": hook-succeeded ───
+    # Hook 完成后这个 Job 怎么处理：
+    #   hook-succeeded：成功后删除 Job 的 Pod（当前设定，节省资源）
+    #   before-hook-creation：新 Hook 创建前删除旧的
+    #   hook-failed：失败后保留（方便查看日志排查问题）
+    "helm.sh/hook-delete-policy": hook-succeeded
+
+spec:
+  # ─── backoffLimit: 重试次数 ───
+  # 3 次重试如果都失败 → Hook 失败 → helm install 失败
+  backoffLimit: 3
+
+  template:
+    metadata:
+      labels:
+        app: rabbitmq-ready-check
+    spec:
+      # ─── restartPolicy: Never ───
+      # Hook 是跑完就退出的 Job，不是常驻服务
+      restartPolicy: Never
+
+      containers:
+        - name: rabbitmq-check
+          # busybox: 极简 Linux 镜像（只有几 MB），包含基本的 shell 命令
+          image: busybox:1.36
+
+          command:
+            - sh
+            - -c
+            - |
+              # ─── 等待 RabbitMQ 就绪 ───
+              # rabbitmq-diagnostics check_running 是 RabbitMQ 自带的健康检查命令
+              # 它在 rabbitmq 容器内执行，需要 exec 进去调用。
+              #
+              # 这里用 nc (netcat) 检查 TCP 端口是否通。
+              # 端口通了不算完全就绪（RabbitMQ 可能在启动过程中），
+              # 但比不检查要好。更精确的方式是用 rabbitmqadmin 或 curl AMQP 管理 API。
+              #
+              # 循环检查：每 5 秒试一次，最多试 24 次 = 120 秒
+              echo ">>> 等待 RabbitMQ 就绪..."
+              for i in $(seq 1 24); do
+                if nc -z rabbitmq 5672; then
+                  echo "✅ RabbitMQ 5672 端口已开放！"
+                  exit 0
+                fi
+                echo "⏳ 第 $i 次检查：RabbitMQ 还未就绪，5 秒后重试..."
+                sleep 5
+              done
+              echo "❌ RabbitMQ 120 秒后仍未就绪，部署中止"
+              exit 1
