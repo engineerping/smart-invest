@@ -1,3 +1,8 @@
+variable "aws_profile" {
+  description = "AWS 的 profile"
+  type        = string
+  default     = "default" # 缺省值为 default，也就是说这
+}
 variable "aws_region" {
   description = "AWS 主部署区域"
   type        = string
