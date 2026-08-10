@@ -135,6 +135,17 @@ provider "helm" {
 #
 # 本项目的所有资源都在 smart-invest 命名空间下。
 # =============================================================================
+# =============================================================================
+# Terraform 语法速查：resource 的语法含义
+# =============================================================================
+# resource "<资源类型>" "<本地名称>" { ... }
+#   - "资源类型"（如 kubernetes_namespace）：由 Provider 定义，告诉 Terraform
+#     「我要创建什么」。命名规范：<provider>_<资源名>
+#   - "本地名称"（如 app）：你自己起的名字，只在当前模块内有效，
+#     用于在代码中引用这个资源，如 kubernetes_namespace.app.metadata[0].name
+#   - 类比 Java：KubernetesNamespace app = new KubernetesNamespace();
+#     资源类型 ≈ 类名，本地名称 ≈ 变量名
+# =============================================================================
 resource "kubernetes_namespace" "app" {
   metadata {
     name = "smart-invest"

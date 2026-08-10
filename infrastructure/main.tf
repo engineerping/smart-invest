@@ -33,6 +33,22 @@
 #   私有子网 = 路由表没有指向 Internet Gateway 的路由 → 不能直接访问互联网
 #   最佳实践：EC2 放公有子网（对外服务），RDS 放私有子网（只允许 EC2 访问）
 # =============================================================================
+# =============================================================================
+# Terraform 语法速查：module 的语法含义
+# =============================================================================
+# module "<本地名称>" { source = "<模块路径>" ... }
+#   - "本地名称"（如 vpc）：你自己起的名字，用于在代码中引用这个模块的输出，
+#     如 module.vpc.public_subnet_id
+#   - source: 模块代码位置，可以是本地路径（./modules/xxx）、Git 仓库、Terraform Registry
+#   - 其他参数：传递给模块的 variables（对应模块内 variable 块的定义）
+#   - 类比 Java：VpcModule vpc = new VpcModule(config);
+#     模块 ≈ 类，source ≈ 类路径，参数 ≈ 构造函数参数
+#
+# resource / data / module 三者的区别：
+#   - resource = 创建/管理资源（CRUD 的 CUD）→ terraform destroy 会删除
+#   - data    = 查询已有资源（CRUD 的 R）  → terraform destroy 不涉及
+#   - module  = 封装一组资源的可复用单元    → 内部有 resource/data/output
+# =============================================================================
 module "vpc" {
   source     = "./modules/vpc"
   region     = var.aws_region    # 用于拼接可用区名（如 us-east-1a）

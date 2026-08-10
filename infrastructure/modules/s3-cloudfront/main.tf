@@ -44,6 +44,17 @@
 #   aws s3 sync dist/ s3://<bucket-name>/     # 同步到 S3
 #   aws cloudfront create-invalidation ...     # 刷新 CDN 缓存
 # =============================================================================
+# =============================================================================
+# Terraform 语法速查：resource 的语法含义
+# =============================================================================
+# resource "<资源类型>" "<本地名称>" { ... }
+#   - "资源类型"（如 aws_s3_bucket）：由 Provider 定义，告诉 Terraform「我要创建什么」。
+#     命名规范：<provider>_<资源名>
+#   - "本地名称"（如 frontend）：你自己起的名字，只在当前模块内有效，
+#     用于在代码中引用这个资源，如 aws_s3_bucket.frontend.id
+#   - 类比 Java：AwsS3Bucket frontend = new AwsS3Bucket();
+#     资源类型 ≈ 类名，本地名称 ≈ 变量名
+# =============================================================================
 resource "aws_s3_bucket" "frontend" {
   bucket = "smart-invest-frontend-${var.account_id}"   # account_id 保证全局唯一
 }
