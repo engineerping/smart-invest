@@ -47,24 +47,59 @@ sshpass -p 'George0' scp $SSH_OPTS -r \
   "$(cd "$(dirname "$0")/../infrastructure/helm-charts" && pwd)"/* \
   "$SERVER:$REMOTE_DIR/"
 
-echo ">>> 4. 服务器上执行 helm install（ns: smart-invest）"
+echo ">>> 4. 服务器上执行 Helm 部署"
+# ═══════════════════════════════════════════════════════════════════════════
+# 📖 --wait 和 --atomic 与 Hook 的协作（解决痛点 4: 依赖顺序）
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# 执行流程（Helm 引擎控制）:
+#   Step 1: 按内置安装顺序创建 K8S 资源
+#           Namespace → Secret → PVC → rabbitmq → user-service → ... → Ingress
+#   Step 2: 发现 rabbitmq-ready-hook.yaml 是一个 post-install Hook
+#           → 等待 Step 1 的所有 Deployment/StatefulSet Pod Ready
+#   Step 3: 执行 Hook Job（rabbitmq-ready-check）
+#           → busybox 容器循环 nc -z rabbitmq 5672
+#           → RabbitMQ 的 5672 端口可联通 → exit 0 → Job Complete
+#   Step 4: --wait 发挥作用: Helm CLI 等待 Hook Job Complete
+#           如果 Hook 失败（exit 1） → Helm 会报错退出
+#   Step 5: 创建 Release Secret → 标记 deployed
+#
+# --wait vs --atomic 的区别（面试常问）:
+#   --wait    → 等 Pod Ready + Hook 完成，超时就标记 failed，但不回滚
+#   --atomic  → 等 Pod Ready + Hook 完成，超时或失败 → 自动 rollback 到上一个版本
+#   这里用 --atomic 是生产最佳实践: 失败自动回滚，不留 failed release。
+#
+# 超时时间说明:
+#   --timeout 600s = 10 分钟
+#   考虑: RabbitMQ 镜像首次拉取 ~2min + 启动 ~1min + Hook 最多等 5min
+#        + 6 个微服务拉镜像/启动 ~3min → 总共 ~10min, 够用
+# ═══════════════════════════════════════════════════════════════════════════
 sshpass -p 'George0' ssh $SSH_OPTS "$SERVER" "
   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
   cd $REMOTE_DIR/umbrella
-  sudo helm upgrade --install smart-invest . \
-    --namespace smart-invest --create-namespace \
-    --set secrets.dbPassword='bG9jYWxkZXYtb25seQ==' \
-    --set secrets.rabbitmqPassword='bG9jYWxkZXYtb25seQ==' \
-    --set user-service.image.tag=$TAG \
-    --set fund-service.image.tag=$TAG \
-    --set order-service.image.tag=$TAG \
-    --set notification-worker.image.tag=$TAG \
-    --set api-gateway.image.tag=$TAG \
-    --set frontend.image.tag=$TAG \
-    --wait --timeout 300s
+
+  # ① helm dependency build: 确保子 Chart 的 .tgz 已下载到 charts/
+  sudo helm dependency build . >/dev/null 2>&1
+
+  # ② helm lint: 语法检查（部署前最后一道防线）
+  sudo helm lint . --namespace smart-invest
+
+  # ③ 部署（带 --atomic）: 失败自动回滚
+  sudo helm upgrade --install smart-invest . \\
+    --namespace smart-invest --create-namespace \\
+    --set secrets.dbPassword='bG9jYWxkZXYtb25seQ==' \\
+    --set secrets.rabbitmqPassword='bG9jYWxkZXYtb25seQ==' \\
+    --set user-service.image.tag=$TAG \\
+    --set fund-service.image.tag=$TAG \\
+    --set order-service.image.tag=$TAG \\
+    --set notification-worker.image.tag=$TAG \\
+    --set api-gateway.image.tag=$TAG \\
+    --set frontend.image.tag=$TAG \\
+    --atomic --timeout 600s \\
+    --description=\"Deploy tag=$TAG\"
 "
 
-echo ">>> 5. 健康检查：等待 Pod 就绪"
+echo ">>> 5. 验证部署（Release 已确认成功，以下只是展示状态）"
 sshpass -p 'George0' ssh $SSH_OPTS "$SERVER" "
   export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
   echo '=== Pods ==='

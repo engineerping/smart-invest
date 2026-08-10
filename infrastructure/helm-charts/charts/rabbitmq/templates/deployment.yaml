@@ -1,5 +1,14 @@
 # =============================================================================
-# RabbitMQ Deployment —— 官方镜像 + 管理插件 + Prometheus 插件
+# 🐰 RabbitMQ Deployment —— 消息队列的部署清单
+# =============================================================================
+#
+# 📖 和 user-service 的 deployment 相比, 这个多了什么?
+#   1. command/args    → 自定义启动命令 (启用 RabbitMQ 插件)
+#   2. volumeMounts    → 挂载持久化存储 (PVC), 保证 RabbitMQ 重启不丢数据
+#   3. 多个端口         → AMQP(5672) + 管理台(15672) + Prometheus 指标(15692)
+#
+# 📖 注意: 这个服务的 auth.password 也是从 smart-invest-secrets Secret 读的,
+#   因为 Secret 是 umbrella chart 创建的公共资源, 所有子 Chart 共用。
 # =============================================================================
 apiVersion: apps/v1
 kind: Deployment
@@ -20,35 +29,69 @@ spec:
       containers:
         - name: rabbitmq
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          # 渲染结果: image: "rabbitmq:3.13-management-alpine"
+          # management-alpine = 带管理插件的 Alpine Linux 版本 (轻量)
+
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+
           ports:
-            - containerPort: {{ .Values.service.amqpPort }}
+            - containerPort: {{ .Values.service.amqpPort }}       # 5672 AMQP 协议端口
               name: amqp
-            - containerPort: {{ .Values.service.managerPort }}
+            - containerPort: {{ .Values.service.managerPort }}    # 15672 Web 管理台
               name: management
-          # 启用管理台 + Prometheus 指标插件
+
+          # ═══════════════════════════════════════════════════════════════
+          # command/args: 自定义容器启动命令 (覆盖 Dockerfile 里的 ENTRYPOINT)
+          # ═══════════════════════════════════════════════════════════════
+          # 容器启动后执行:
+          #   1. rabbitmq-plugins enable --offline rabbitmq_management rabbitmq_prometheus
+          #      → 启用管理台插件 (Web UI) + Prometheus 指标插件
+          #   2. exec docker-entrypoint.sh rabbitmq-server
+          #      → 执行 RabbitMQ 官方的启动脚本 (替换当前 shell 进程)
           command: ["/bin/sh", "-c"]
           args:
             - |
               rabbitmq-plugins enable --offline rabbitmq_management rabbitmq_prometheus
               exec docker-entrypoint.sh rabbitmq-server
+
           env:
+            # 非敏感环境变量: 直接写值
             - name: RABBITMQ_DEFAULT_USER
               value: {{ .Values.auth.username | quote }}
+              # 渲染结果: value: "smartmq"
+
+            # 敏感环境变量: 从 Secret 注入 (和老大哥 user-service 同一个 Secret)
             - name: RABBITMQ_DEFAULT_PASS
               valueFrom:
                 secretKeyRef:
-                  name: smart-invest-secrets
+                  name: smart-invest-secrets      # ← 同一个 Secret！
                   key: {{ .Values.auth.passwordEnvRef }}
-            # Prometheus 指标暴露在 15692 端口
+                  # 渲染结果: key: RABBITMQ_PASSWORD
+
+            # Prometheus 指标端口 (给监控系统抓数据用)
             - name: RABBITMQ_PROMETHEUS_PORT
               value: "15692"
+
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+
+          # ═══════════════════════════════════════════════════════════════
+          # volumeMounts: 挂载存储卷 → 和下面的 volumes 字段配对使用
+          # ═══════════════════════════════════════════════════════════════
+          # 把名为 data 的卷挂载到容器的 /var/lib/rabbitmq 目录
+          # RabbitMQ 的消息/队列定义都写在 /var/lib/rabbitmq 下
+          # 挂了 PVC 后, Pod 重启/重建 → 数据还在 (恢复点)
           volumeMounts:
             - name: data
               mountPath: /var/lib/rabbitmq
+
+      # ═══════════════════════════════════════════════════════════════════
+      # volumes: 声明 Pod 级别的存储卷 → 和上面的 volumeMounts 配对
+      # ═══════════════════════════════════════════════════════════════════
+      # persistentVolumeClaim: 复用已有的 PVC (由 pvc.yaml 创建)
+      # 类比: PVC = 申请磁盘, volume = 把磁盘插到 Pod 上
       volumes:
         - name: data
           persistentVolumeClaim:
-            claimName: rabbitmq-data
+            claimName: rabbitmq-data    # ← 对应 pvc.yaml 里定义的 PVC 名
+

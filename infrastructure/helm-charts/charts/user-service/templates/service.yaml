@@ -1,20 +1,57 @@
 # =============================================================================
-# Service —— 服务发现
+# 🌐 Service —— K8S 集群内部的服务发现与负载均衡
 # =============================================================================
-# 类比：给一组 Pod 发一个"固定的门牌号"(ClusterIP) + 一个稳定的 DNS 名。
-# 其他服务通过 http://user-service:8081 访问，不关心具体哪个 Pod。
-# 这就是 K8S 内置的服务发现（对应架构图里 K8S CoreDNS 的职责）。
-apiVersion: v1
-kind: Service
+#
+# 📖 Service 解决的问题 (K8S 最核心的设计之一):
+#   Pod 的 IP 是临时的 —— Pod 重建后 IP 会变。
+#   那 order-service 怎么找到 user-service?
+#   答案: 通过 Service 的 ClusterIP + DNS 名, 而不是直接连 Pod IP。
+#
+#   Service 提供了:
+#     1. 稳定的 ClusterIP (虚拟 IP, Service 存在期间不变)
+#     2. 集群内 DNS 名 (如 user-service.smart-invest.svc.cluster.local)
+#     3. 负载均衡 (请求随机分发到后端健康 Pod)
+#
+# 📖 服务发现链路:
+#   order-service → 访问 http://user-service:8081/api/users
+#     → CoreDNS 解析 user-service → 返回 Service 的 ClusterIP (虚拟)
+#     → kube-proxy 的 iptables 规则 → 随机转发到某个 Pod 的真实 IP
+#     → 目标 Pod 收到请求
+#
+# 📖 这个模板相对简单, 是因为 Service 本身就不复杂 ——
+#   核心就是「selector 选 Pod + port 映射」
+# =============================================================================
+
+apiVersion: v1                    # Service 是 K8S v1 API 核心资源
+kind: Service                     # ← 资源类型
+
 metadata:
+  # name: 也用的 svc.fullname (和 Deployment 一样, 保证一致性)
   name: {{ include "svc.fullname" . }}
   labels:
     {{- include "svc.labels" . | nindent 4 }}
+
 spec:
+  # ─── type: 服务暴露方式 ───
+  # ClusterIP: 只集群内部访问 (微服务间调用默认用这个)
   type: {{ .Values.service.type }}
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # selector: 这是 Service 最核心的字段！
+  # ═════════════════════════════════════════════════════════════════════════
+  # Service 通过 selector 找到后端 Pod, 匹配的是 Pod 的 labels。
+  # 这里的 key-value 必须等于 Deployment 里 template.metadata.labels 的值,
+  # 否则 Service 找不到 Pod → Endpoints 为空 → 服务不可达。
+  # 排查口诀: kubectl get endpoints 为空? → 检查 Service 的 selector
+  #           和 Deployment 的 template metadata labels 是否一致
   selector:
     app.kubernetes.io/name: {{ include "svc.name" . }}
+
+  # ─── ports: Service 端口 → 容器端口的映射 ───
   ports:
-    - port: {{ .Values.service.port }}
-      targetPort: {{ .Values.service.port }}
-      protocol: TCP
+    - port: {{ .Values.service.port }}        # Service 自己监听的端口 (访问 http://服务:8081)
+      targetPort: {{ .Values.service.port }}   # 容器内应用监听的端口 (Java 8081)
+      protocol: TCP                            # TCP 协议
+      # 补充: port 和 targetPort 可以不同, 如 port: 80, targetPort: 8080
+      #       但这里为简单保持一致
+

@@ -1,0 +1,175 @@
+# =============================================================================
+# 🪝 Helm Hook Job —— 解决「依赖顺序」的实践利器
+# =============================================================================
+#
+# 📖 这个文件演示了 Helm_Complete_Guide.md 中「痛点 4」的解决方案。
+#
+# ═════════════════════════════════════════════════════════════════════════════
+# 没有 Helm Hook 之前的世界（痛点 4）:
+# ═════════════════════════════════════════════════════════════════════════════
+#   kubectl apply -f rabbitmq.yaml       ← 创建 RabbitMQ Deployment
+#   kubectl apply -f fund-service.yaml   ← 同时创建 fund-service（并发！）
+#   kubectl apply -f order-service.yaml  ← 同时创建 order-service（并发！）
+#   kubectl apply -f notification-worker.yaml
+#
+#   问题: kubectl apply 是并发执行的，不做依赖排序。
+#   RabbitMQ Pod 还没启动完，fund-service 就已经开始连 RabbitMQ 了
+#   → 连接失败 → Spring Boot 报错 → 虽然 Spring Retry 最终能重连上，
+#   但 Helm Release 在 RabbitMQ 真正就绪前就已经 marked deployed 了。
+#
+#   对比: 如果有数据库迁移 Job，它必须在应用启动前跑完（否则 schema 不对），
+#   这种情况下没有 Hook 就是灾难——Pod 起来连不上 DB → CrashLoopBackOff。
+#
+# ═════════════════════════════════════════════════════════════════════════════
+# 有 Helm Hook 之后:
+# ═════════════════════════════════════════════════════════════════════════════
+#   helm install smart-invest ./umbrella/ --wait
+#     │
+#     ├── ① 按依赖顺序创建所有 K8S 资源（Secret → PVC → RabbitMQ → 微服务）
+#     │      此阶段所有资源都提交给 API Server 了，但 RabbitMQ 未必 Ready
+#     │
+#     ├── ② 执行 post-install hooks（按 hook-weight 升序）
+#     │      └── 这个 Job 就是 post-install hook！
+#     │          它循环检查 RabbitMQ 5672 端口，就绪后才 exit 0
+#     │
+#     ├── ③ --wait 参数: Helm CLI 等这个 Job Complete → 才标记 Release deployed
+#     │      如果 Job 失败（RabbitMQ 超时） → Helm 报错，Release 状态 = failed
+#     │      配合 --atomic → 失败自动 rollback
+#     │
+#     └── ④ helm install 成功返回时，RabbitMQ 一定是就绪的！
+#
+# ═════════════════════════════════════════════════════════════════════════════
+# Helm Hook 五大核心注解（写在 Job 的 annotations 里）:
+# ═════════════════════════════════════════════════════════════════════════════
+#
+#   helm.sh/hook:
+#     指定 Hook 在 Release 生命周期的哪个阶段执行。
+#     可选值（可组合，逗号分隔）:
+#       pre-install       → helm install 开始前（如：创建安装所需的 RBAC）
+#       post-install      → 所有资源创建完成后（如：等待依赖就绪、冒烟测试）
+#       pre-delete        → helm uninstall 开始前（如：数据库备份）
+#       post-delete       → 所有资源删除后（如：清理外部资源）
+#       pre-upgrade       → helm upgrade 开始前（如：数据库 schema 迁移）
+#       post-upgrade      → 升级后（如：等待新版本就绪）
+#       pre-rollback      → helm rollback 开始前
+#       post-rollback     → 回滚后
+#       test              → helm test 触发（冒烟测试专用）
+#
+#   helm.sh/hook-weight:
+#     多个 Hook 的执行顺序。数字越小越先执行（可以是负数）。
+#     例: DB migration Job weight=-5 → 先执行，rabbitmq check weight=0 → 后执行
+#
+#   helm.sh/hook-delete-policy:
+#     Hook 资源何时被自动清理。
+#       before-hook-creation → 下次 Hook 运行前删掉上次的（默认 + 推荐）
+#       hook-succeeded       → Hook 成功后删掉
+#       hook-failed          → Hook 失败后保留（方便 debug，看日志）
+#
+#   helm.sh/resource-policy:
+#     控制 Helm 对这些资源的生命周期管理。
+#       keep → helm uninstall 时保留资源（不被删除）
+#             适用于 PV、数据库备份等需要比 Release 活得更久的资源
+# ═════════════════════════════════════════════════════════════════════════════
+
+apiVersion: batch/v1
+kind: Job                                    # ← Hook 资源类型通常是 Job（跑完就退出）
+metadata:
+  # name: 前缀 {{ .Release.Name }} 保证每次 release 的 hook 资源名唯一
+  name: {{ .Release.Name }}-rabbitmq-ready-check
+  labels:
+    {{- include "svc.labels" . | nindent 4 }}
+  annotations:
+    # ─── 核心注解1: 指定 hook 执行时机 ───
+    # post-install:  helm install 时，所有资源创建完成后执行
+    # post-upgrade:  helm upgrade 时，所有资源更新完成后执行
+    # 为什么没有 pre-delete? → 删除时不需要检查依赖
+    "helm.sh/hook": post-install, post-upgrade
+
+    # ─── 核心注解2: 权重（数字越小越先执行） ───
+    # 设为 0，如果以后加 DB migration Job（如 Liquibase），设为 -5，
+    # DB 迁移就会在这个 Job 之前执行
+    "helm.sh/hook-weight": "0"
+
+    # ─── 核心注解3: 删除策略 ───
+    # before-hook-creation: 每次新 Hook 运行前删除旧的同名 Job（避免冲突）
+    # hook-succeeded:       成功后自动删除（保持集群干净，不残留已完成的 Job）
+    # 不加 hook-failed → 失败时保留 Pod，方便 kubectl logs 查看失败原因
+    "helm.sh/hook-delete-policy": before-hook-creation, hook-succeeded
+
+spec:
+  # ─── ttlSecondsAfterFinished: Job 完成后 60 秒自动清理 ───
+  # 这是 K8S 1.21+ 的功能，和 hook-delete-policy 互补
+  ttlSecondsAfterFinished: 60
+
+  template:
+    metadata:
+      labels:
+        {{- include "svc.labels" . | nindent 8 }}
+    spec:
+      # ─── restartPolicy: Never ───
+      # Hook Job 失败后不重试（让 helm --wait 感知到失败）
+      restartPolicy: Never
+
+      # ─── serviceAccountName ───
+      # 如果集群有 RBAC 限制，可能需要指定 ServiceAccount
+      # 这个 Job 只做网络检查，不需要任何 K8S API 权限，用 default 即可
+
+      containers:
+        - name: rabbitmq-check
+
+          # busybox: 极小的 Linux 工具集（~1MB），内置 nc（netcat）命令
+          # 为什么不用 rabbitmq 镜像？因为只需要检查端口，不需要 RabbitMQ 工具链
+          image: busybox:1.36
+          imagePullPolicy: IfNotPresent
+
+          # ─── command/args: 循环检查 RabbitMQ 的 AMQP 端口直到就绪或超时 ───
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              # ═══════════════════════════════════════════════════════════
+              # 这个脚本做的事:
+              #   每 5 秒尝试连接 RabbitMQ 的 5672 端口（AMQP 协议端口）
+              #   成功 → 退出 0（Hook 成功，helm install --wait 继续）
+              #   60 次（5 分钟）后仍失败 → 退出 1（Hook 失败，Release 标记 failed）
+              # ═══════════════════════════════════════════════════════════
+
+              MAX_RETRIES=60              # 最多重试 60 次
+              SLEEP_SECONDS=5             # 每次间隔 5 秒
+              RABBITMQ_HOST="rabbitmq"    # RabbitMQ 的 K8S Service 名（DNS 解析）
+              RABBITMQ_PORT=5672          # AMQP 协议端口
+
+              echo "======================================================"
+              echo "  🐰 Helm Hook: 等待 RabbitMQ 就绪"
+              echo "  📡 目标: ${RABBITMQ_HOST}:${RABBITMQ_PORT}"
+              echo "  ⏱️  最多等待: $(( MAX_RETRIES * SLEEP_SECONDS )) 秒"
+              echo "======================================================"
+
+              i=1
+              while [ $i -le $MAX_RETRIES ]; do
+                # ─── nc -z: TCP 端口扫描模式 ───
+                # -z = 只检测端口是否开放（不发送数据），适合健康检查
+                # -w 3 = 连接超时 3 秒
+                if nc -z -w 3 $RABBITMQ_HOST $RABBITMQ_PORT 2>/dev/null; then
+                  echo ""
+                  echo "  ✅ 第 ${i} 次检查成功！RabbitMQ AMQP 端口已就绪。"
+                  echo "  🎉 fund-service / order-service / notification-worker"
+                  echo "     现在可以安全连接 RabbitMQ 了。"
+                  exit 0
+                fi
+
+                # ─── 进度提示: 每 10 次打印一条 ───
+                if [ $(( i % 10 )) -eq 0 ]; then
+                  echo "  ⏳ 第 ${i}/${MAX_RETRIES} 次检查中...（已等待 $(( i * SLEEP_SECONDS )) 秒）"
+                fi
+
+                sleep $SLEEP_SECONDS
+                i=$(( i + 1 ))
+              done
+
+              echo ""
+              echo "  ❌ 超时！RabbitMQ 在 $(( MAX_RETRIES * SLEEP_SECONDS )) 秒内未就绪。"
+              echo "  🔧 排查建议:"
+              echo "    1. kubectl get pods -n {{ .Release.Namespace }} | grep rabbitmq"
+              echo "    2. kubectl logs -n {{ .Release.Namespace }} deployment/rabbitmq"
+              echo "    3. kubectl describe pvc rabbitmq-data -n {{ .Release.Namespace }}"
+              exit 1

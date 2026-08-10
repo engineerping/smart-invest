@@ -20,5 +20,8 @@ dependencies:
 - name: frontend
   repository: file://../charts/frontend
   version: 0.1.0
-digest: sha256:82492f72ba31f7baa24bf38daad940fb3877243fa1c20a8c5522f4ceaad7312b
-generated: "2026-08-03T03:36:09.105992+08:00"
+- name: redis
+  repository: https://charts.bitnami.com/bitnami
+  version: 21.0.0
+digest: sha256:501e08af29bcee58ee8099849c49af894269e6b8c1172fdbfd989f97d2a71605
+generated: "2026-08-10T01:07:56.914705+08:00"

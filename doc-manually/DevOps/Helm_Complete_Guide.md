@@ -424,15 +424,20 @@ CI/CD 里怎么把镜像 tag 注入到 YAML？
 ### 4.1 演进概览
 
 ```
-Helm1 (2015-2016)     Helm2 (2016-2019)          Helm3 (2019-至今)
-─────────────────     ─────────────────          ─────────────────
-原型阶段              引入 Tiller（服务端）       移除 Tiller！
-                      引入 Chart Repository      客户端 only
-                      引入 Release 管理          OCI Registry 支持
-                                                 Lua 钩子 → K8S Job 钩子
-                                                 3-way strategic merge
-                                                 Helm SDK（可编程调用）
+Helm1           Helm2                 Helm3 
+(2015-2016)     (2016-2019)           (2019-至今)
+──────────     ────────────           ─────────────────
+原型阶段        引入 Tiller（服务端）      移除 Tiller！
+               引入 Chart Repository    客户端 only
+               引入 Release 管理         OCI Registry支持.(Open Container Initiative) 
+                                        Lua 钩子 → K8S Job 钩子
+                                        3-way strategic merge
+                                        Helm SDK（可编程调用）
 ```
+
+> Helm 3 的 OCI Registry
+> Helm 3 引入了 OCI (Open Container Initiative) Registry 支持，：Chart 可以不再仅仅依赖传统的 Helm Chart 仓库。
+> 在 Helm 3.8+ 中，OCI 支持默认启用。你可以把 Helm Chart 像 Docker 镜像一样推送到 Docker Hub、Harbor、AWS ECR、GitHub Container Registry 等支持 OCI Artifacts 的仓库中。
 
 ### 4.2 为什么 Helm2 引入 Tiller？
 
@@ -530,21 +535,21 @@ kubectl -n smart-invest get secrets -l owner=helm
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                        helm CLI (Go 编写)                       │
+│                        helm CLI (Go 编写)                        │
 │                                                                 │
-│  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌───────────────┐ │
-│  │ 模板引擎  │  │ 依赖管理 │  │ Release   │  │  Repository   │ │
-│  │ (Go      │  │ (Chart.  │  │ 生命周期   │  │ 交互          │ │
-│  │  Template│  │  yaml +  │  │ (install/ │  │ (repo add/    │ │
-│  │  +Sprig) │  │  lock)   │  │  upgrade/ │  │  update/push) │ │
-│  │          │  │          │  │  rollback/│  │               │ │
-│  │          │  │          │  │  uninstall│  │               │ │
-│  └──────────┘  └──────────┘  └───────────┘  └───────────────┘ │
+│  ┌──────────┐  ┌──────────┐  ┌───────────┐  ┌───────────────┐   │
+│  │ 模板引擎  │   │ 依赖管理  │  │ Release   │  │  Repository   │   │
+│  │ (Go      │  │ (Chart.  │  │ 生命周期   │   │ 交互          │   │
+│  │  Template│  │  yaml +  │  │ (install/ │  │ (repo add/    │   │
+│  │  +Sprig) │  │  lock)   │  │  upgrade/ │  │  update/push) │   │
+│  │          │  │          │  │  rollback/│  │               │   │
+│  │          │  │          │  │  uninstall│  │               │   │
+│  └──────────┘  └──────────┘  └───────────┘  └───────────────┘   │
 │                                                                 │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │                  K8S Client-Go SDK                       │  │
-│  │  （复用 kubectl 同款 SDK，通过 kubeconfig 认证）           │  │
-│  └──────────────────────────────────────────────────────────┘  │
+│  ┌──────────────────────────────────────────────────────────────┐  │
+│  │                  K8S Client-Go SDK                           │  │
+│  │  （复用 kubectl 同款 SDK(不是复用kubectl)，通过 kubeconfig 认证） │  |
+│  └──────────────────────────────────────────────────────────────┘  |
 └─────────────────────────────────────────────────────────────────┘
          │                                    │
          │ REST/HTTP                          │ REST/HTTP
@@ -562,31 +567,31 @@ kubectl -n smart-invest get secrets -l owner=helm
 
 ```
                         helm install
-    [不存在] ──────────────────────────────→ [deployed]
-                                                  │
-                                   helm upgrade    │
-                                                  ▼
-                                            [superseded]
-                                                  │
-                             ┌────────────────────┼────────────────────┐
-                             │                    │                    │
-                      升级成功              升级失败              手动回滚
-                             │                    │                    │
-                             ▼                    ▼                    ▼
-                       [deployed]            [failed]            [deployed]
-                       新 REVISION           新 REVISION          新 REVISION
-                                                  │
-                                        helm rollback
-                                                  │
-                                                  ▼
-                                            [deployed]
-                                            新 REVISION
-                                            （状态显示 Rollback to N）
+    [不存在] ────────────────────────→ [deployed]
+                                            │
+                            helm upgrade    │
+                                            ▼
+                                      [superseded]
+                                            │
+                       ┌────────────────────┼────────────────────┐
+                       │                    │                    │
+                升级成功              升级失败              手动回滚
+                       │                    │                    │
+                       ▼                    ▼                    ▼
+                 [deployed]            [failed]            [deployed]
+                 新 REVISION           新 REVISION          新 REVISION
+                                            │
+                                     helm rollback
+                                            │
+                                            ▼
+                                      [deployed]
+                                      新 REVISION
+                                      （状态显示 Rollback to N）
 
 
-                        helm uninstall
-    [任何状态] ─────────────────────────────→ [uninstalled]
-                                              （所有 REVISION 的 Secret 被删除）
+                  helm uninstall
+    [任何状态] ───────────────────────→ [uninstalled]
+                                       （所有 REVISION 的 Secret 被删除）
 ```
 
 #### 5.2.1 Manifest 这个词的含义——从航运到 Java 到 K8S
@@ -1242,30 +1247,545 @@ helm upgrade my-release ./chart/ --description="Fix: user-service OOM"
 
 ### 8.2 Chart 目录结构最佳实践
 
-```yaml
-my-chart/
-├── Chart.yaml              # 必填：元数据
-├── values.yaml             # 必填：默认配置
-├── values.schema.json      # 推荐：JSON Schema 校验 values
-├── charts/                 # 子 chart（手动或 helm dep build 生成）
-├── templates/
-│   ├── NOTES.txt           # 推荐：安装后显示的提示信息
-│   ├── _helpers.tpl        # 推荐：命名模板（公共逻辑）
-│   ├── deployment.yaml     # K8S 资源模板
-│   ├── service.yaml
-│   ├── ingress.yaml
-│   ├── hpa.yaml
-│   ├── serviceaccount.yaml
-│   ├── configmap.yaml
-│   ├── secret.yaml
-│   └── tests/              # 推荐：helm test 用的测试 Pod
-│       └── test-connection.yaml
-├── .helmignore             # 推荐：类似 .gitignore
-├── Chart.lock              # 自动生成：依赖锁定
-└── README.md               # 推荐：Chart 文档
+一个标准的 Helm Chart 遵循严格的目录规范。下面是一个**完整、生产就绪**的 Chart 目录结构，每个文件/目录都有详细的职责说明。
+
+#### 8.2.0 标准 Helm Chart 完整目录结构
+
+```
+my-chart/                              # ← Chart 根目录，目录名 = Chart 名（建议用 kebab-case）
+│
+├── Chart.yaml                         # 【必填】Chart 的「身份证」——元数据 + 依赖声明
+│                                      #   - apiVersion: v2        ← Helm 3 固定写 v2
+│                                      #   - name: my-chart        ← 包名（类比 Maven artifactId）
+│                                      #   - version: 1.0.0        ← Chart 自身版本（改模板就升这个）
+│                                      #   - appVersion: "1.16.0"  ← 应用版本（镜像 tag，纯文档字段）
+│                                      #   - type: application     ← application（99%）| library（函数库）
+│                                      #   - dependencies: [...]   ← 依赖的子 Chart 列表
+│                                      #
+│                                      # 类比：Maven pom.xml 的 <groupId>:<artifactId>:<version>
+│                                      #       + <dependencies> + <packaging>
+│
+├── values.yaml                        # 【必填】默认配置值——模板里 {{ .Values.xxx }} 的来源
+│                                      #   - 这是 Chart 开发者定义的「出厂默认值」
+│                                      #   - 安装时被 -f 外部文件 和 --set 参数覆盖
+│                                      #   - 大型 Chart 可以把 values 拆成多个文件（values-*.yaml）
+│                                      #
+│                                      # 类比：Spring Boot 的 application.yml（默认 profile）
+│                                      #       被 application-{profile}.yml 覆盖
+│
+├── values.schema.json                 # <推荐>JSON Schema 校验 values.yaml 的结构
+│                                      #   - 定义每个字段的：类型、是否必填、取值范围、描述
+│                                      #   - helm install 时自动校验，不合规的直接拒绝
+│                                      #   - 解决了"values 写错字段名，部署后发现不对劲"的问题
+│                                      #
+│                                      # 类比：Java Bean Validation (@NotNull, @Min, @Max)
+│
+├── .helmignore                        # <推荐>打包时排除的文件（类似 .gitignore）
+│                                      #   典型排除：.git/ .idea/ *.swp README.md .DS_Store
+│
+├── README.md                          # <推荐>Chart 使用文档
+│                                      #   - 参数说明表（每个 values 字段的含义和默认值）
+│                                      #   - 安装示例（helm install ...）
+│                                      #   - 前置条件（如需要什么 StorageClass、CRD）
+│                                      #
+│                                      # 类比：npm 包的 README.md / Java 库的 README
+│
+├── LICENSE                            # 「可选」开源协议声明
+│
+├── Chart.lock                         # 【自动生成】依赖锁定文件
+│                                      #   - helm dependency update 自动生成
+│                                      #   - 记录每个依赖的：精确版本 + SHA256 哈希
+│                                      #   - 提交到 Git（保证所有人安装的一致）
+│                                      #
+│                                      # 类比：package-lock.json / Gemfile.lock / Cargo.lock
+│
+├── charts/                            # 【自动生成】子 Chart 的 .tgz 打包文件
+│   │                                  #   - helm dependency update 下载到这里（本地 file:// 依赖也打包到这里）
+│   │                                  #   - 内容 = 子 Chart 源码打包成的 tar.gz
+│   │                                  #   - ⚠️ 不手改，不提交 Git（或使用 Git LFS）
+│   │                                  #
+│   │                                  # 类比：Maven ~/.m2/repository/ 里的 .jar 缓存
+│   │
+│   ├── common-lib-1.2.0.tgz          # 子 Chart 1
+│   └── redis-18.0.0.tgz              # 子 Chart 2（来自远程仓库，如 Bitnami）
+│
+├── crds/                              # 「可选」CustomResourceDefinition YAML
+│   │                                  #   - 放 .yaml 文件，不放模板（不支持模板渲染）
+│   │                                  #   - helm install 时最先创建，helm uninstall 时不删除
+│   │                                  #   - 适用于：cert-manager、Prometheus Operator 等需要 CRD 的场景
+│   │
+│   └── my-crd.yaml                    # 原始 CRD 定义（静态 YAML，无 Go Template 语法）
+│
+└── templates/                         # 【必填】K8S 资源模板目录——Helm 最核心的部分
+    │                                  #   这个目录下的所有 .yaml/.tpl 文件都会被模板引擎处理
+    │
+    ├── NOTES.txt                      # <推荐>安装成功后打印的提示信息
+    │                                  #   - 支持模板语法（可以输出动态的访问地址、密码等）
+    │                                  #   - helm install 完成后 → 自动输出 → helm get notes 可再次查看
+    │                                  #
+    │                                  # 类比：npm postinstall 打印的 "Thanks for installing!" 信息
+    │
+    ├── _helpers.tpl                   # <推荐>命名模板（公共可复用逻辑）
+    │                                  #   - 以 _ 开头的文件不会生成 K8S 资源
+    │                                  #   - 用 {{ define "模板名" }}...{{ end }} 定义模板
+    │                                  #   - 其他模板用 {{ include "模板名" . }} 引用
+    │                                  #   - 典型内容：标签生成、名称拼接、默认值处理
+    │                                  #
+    │                                  # 类比：Java 的 @Component / Util 工具类
+    │                                  #       DRY 原则：一处定义，处处引用
+    │
+    ├── deployment.yaml                # Deployment 资源模板
+    │                                  #   - 定义 Pod 副本数、容器镜像、探针、资源限制
+    │                                  #   - 通过 {{ .Values.replicaCount }} 等参数化
+    │
+    ├── service.yaml                   # Service 资源模板
+    │                                  #   - 定义 ClusterIP / NodePort / LoadBalancer 类型
+    │                                  #   - 通过 selector 关联 Deployment 的 Pod
+    │
+    ├── serviceaccount.yaml            # ServiceAccount 资源模板
+    │                                  #   - 给 Pod 赋予 K8S API 访问权限
+    │                                  #   - 配合 RBAC (Role/ClusterRole + RoleBinding) 使用
+    │
+    ├── configmap.yaml                 # ConfigMap 资源模板
+    │                                  #   - 非敏感配置（环境变量、配置文件）
+    │                                  #   - 与 Secret 的区别：ConfigMap = 明文，Secret = base64
+    │
+    ├── secret.yaml                    # Secret 资源模板
+    │                                  #   - 敏感配置（密码、Token、TLS 证书）
+    │                                  #   - 模板中通常用 b64enc 函数编码
+    │                                  #   - ⚠️ 这只是 base64 编码，不是加密！生产环境需配合
+    │                                  #     SealedSecret / ExternalSecret / Vault
+    │
+    ├── ingress.yaml                   # Ingress 资源模板
+    │                                  #   - 外部 HTTP/HTTPS 流量入口
+    │                                  #   - 定义域名、路径、TLS 证书
+    │                                  #   - 需要集群安装 Ingress Controller（如 nginx-ingress）
+    │
+    ├── hpa.yaml                       # HorizontalPodAutoscaler 资源模板
+    │                                  #   - 根据 CPU/内存使用率自动扩缩 Pod 副本数
+    │                                  #   - 需要集群安装 metrics-server
+    │
+    ├── pdb.yaml                       # PodDisruptionBudget 资源模板（生产推荐）
+    │                                  #   - 如:设置minAvailable 为 90%,即限制自愿中断（如节点维护）时至少 90% 个 Pod 同时可用
+    │                                  #   - 保证滚动更新/节点排水时服务不中断
+    │
+    ├── pvc.yaml                       # PersistentVolumeClaim 资源模板（有状态服务需要）
+    │                                  #   - 申请持久化存储（数据库、消息队列等）
+    │                                  #   - 需要集群有 StorageClass 和 PV 供应机制
+    │
+    ├── networkpolicy.yaml             # NetworkPolicy 资源模板（生产推荐）
+    │                                  #   - 定义 Pod 间的网络访问规则（零信任网络）
+    │                                  #   - 需要 CNI 插件支持（如 Calico、Cilium）
+    │
+    ├── job.yaml                       # Job / CronJob 资源模板
+    │                                  #   - Job：一次性任务（数据库迁移、数据导入）
+    │                                  #   - CronJob：定时任务（定时清理、定时报表）
+    │
+    └── tests/                         # <推荐>Helm Test 测试资源
+        │                              #   - helm test <release> 会运行这个目录下的测试
+        │                              #   - 测试 Pod 应验证：服务端口可达、API 响应正常
+        │                              #
+        │                              # 类比：Maven surefire → mvn test
+        │
+        └── test-connection.yaml       # 连接的测试 Pod
+                                       #   用 wget/curl 验证 Service 是否可达
 ```
 
-### 8.3 Helm + CI/CD 典型流程
+##### 各文件的「必填/推荐/可选」分类一览
+
+| 文件/目录              | 必要性 | 解释                                   |
+| ------------------ |----| ------------------------------------ |
+| `Chart.yaml`       | 【必填】 | 没有它 Helm 不认为这是 Chart                 |
+| `values.yaml`      | 【必填】 | 没有也可部署，但等于没有默认配置                     |
+| `templates/`       | 【必填】 | 没有模板的 Chart 不产生任何 K8S 资源              |
+| `_helpers.tpl`     | <推荐> | 没有也能工作，但有它意味着你不用复制粘贴                |
+| `NOTES.txt`        | <推荐> | 别人安装你的 Chart 时看到有用提示                  |
+| `values.schema.json` | <推荐> | 生产级别 Chart 的基本要求，防止配置错误              |
+| `.helmignore`      | <推荐> | 避免把 IDE 文件、.git 等打包进 .tgz             |
+| `README.md`        | <推荐> | 懂行的团队都写                              |
+| `tests/`           | <推荐> | CI 中跑 `helm test` 验证部署是否真正可用          |
+| `Chart.lock`       | 自动生成 | `helm dep update` 生成，应提交 Git            |
+| `charts/`          | 自动生成 | `helm dep update` 生成，不应提交 Git（或用 LFS）  |
+| `crds/`            | 「可选」 | 只有需要安装 CRD 时才需要                       |
+| `LICENSE`          | 「可选」 | 开源项目建议有                              |
+
+##### 模板命名约定
+
+| 模板文件                        | 产生什么 K8S 资源       | 何时需要                          |
+| --------------------------- | ----------------- | ----------------------------- |
+| `deployment.yaml`           | Deployment       | 几乎总是需要                        |
+| `service.yaml`              | Service          | 部署了就有                          |
+| `ingress.yaml`              | Ingress          | 需要外部 HTTP 访问时                  |
+| `configmap.yaml`            | ConfigMap        | 有非敏感配置要注入时                    |
+| `secret.yaml`               | Secret           | 有密码/Token/证书要注入时              |
+| `serviceaccount.yaml`       | ServiceAccount   | Pod 需要调用 K8S API 时            |
+| `hpa.yaml`                  | HPA              | 需要自动扩缩容时                      |
+| `pdb.yaml`                  | PDB              | 生产环境（保证维护时服务可用）               |
+| `pvc.yaml`                  | PVC              | 有状态服务（数据库、消息队列）               |
+| `networkpolicy.yaml`        | NetworkPolicy    | 需要网络隔离时（零信任安全架构）             |
+| `job.yaml`                  | Job / CronJob    | 一次性任务或定时任务                    |
+| `tests/test-connection.yaml` | Pod（测试用）        | `helm test` 时需要               |
+| `_helpers.tpl`              | 不产生资源（命名模板）     | 总是需要（DRY 原则）                  |
+| `NOTES.txt`                 | 不产生资源（提示信息）     | 总是需要                          |
+
+
+#### 8.2.1 本项目的实际目录结构 —— 为什么叫 `infrastructure/helm-charts/umbrella`?
+
+目录名里的每一段都是有原因的，不是随意起的：
+
+```
+infrastructure/helm-charts/
+├── charts/                   ← 各微服务的「子 Chart 源码」（你手写/修改的）
+│   ├── user-service/         ← 可独立 helm install 的最小单元
+│   ├── fund-service/
+│   ├── order-service/
+│   ├── notification-worker/
+│   ├── api-gateway/
+│   ├── frontend/
+│   └── rabbitmq/             ← 唯一一个有 PVC 的子 Chart（有状态服务需要持久化）
+│
+└── umbrella/                 ← 父 Chart：聚所有子 Chart + 公共资源
+    ├── Chart.yaml            ← dependencies 声明了所有 7 个子 Chart
+    ├── values.yaml           ← 层覆盖所有子 Chart 的配置（父 > 子）
+    ├── Chart.lock            ← 锁定子 Chart 版本（类比 package-lock.json）
+    ├── templates/
+    │   ├── secret.yaml       ← 公共资源：所有微服务共用的 Secret
+    │   └── ingress.yaml      ← 公共资源：统一的外部流量入口
+    └── charts/               ← helm dep update 下载的子 Chart .tgz（自动生成，不手改）
+        ├── user-service-0.1.0.tgz
+        ├── fund-service-0.1.0.tgz
+        └── ...
+```
+
+**每段目录名的含义：**
+
+| 层级                     | 为什么                                                                                                                                                                       | 类比                                          |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------- |
+| **`infrastructure/`**  | 顶层目录。「基础设施即代码」（IaC）的东西放这里，和业务代码（`src/`）隔开。项目 root 下通常有 `src/`（Java 源码）和 `infrastructure/`（部署相关）两大类                                                                        | Maven 多模块项目里的 `infrastructure/` 模块          |
+| **`helm-charts/`**     | 二级目录。`infrastructure/` 下可能还有 Terraform、Ansible、Docker Compose 等其他部署工具的东西。加 `helm-charts/` 明确这是 Helm 相关                                                                    | `src/main/java/` 里的包名——告诉你是"Helm 相关的"       |
+| **`charts/`**          | 存放**子 Chart 源码**——你手写和修改的地方。每个文件夹是一个独立的 Helm Chart，有自己的 `Chart.yaml`、`values.yaml`、`templates/`                                                                           | 单一仓库（monorepo）里各个独立可发布的模块                   |
+| **`umbrella/`**        | 名字来自 **Umbrella Chart** 模式——伞状结构：一把大伞（父 Chart）下面罩着所有子服务。`dependencies` 把 `charts/` 下 7 个子 Chart 串起来，一条命令部署全家。同时它自己的 `templates/` 也放 secret/ingress 这些**公共资源**（不属于任何一个子服务） | Maven 多模块项目 root 的 `pom.xml`（含 `<modules>`） |
+| **`umbrella/charts/`** | `helm dependency update` 后自动生成的目录。存的是子 Chart 的 `.tgz` 打包文件，**不手改**，不提交 Git（或用 Git LFS）                                                                                    | Maven 的 `~/.m2/repository/` ——自动下载的缓存       |
+
+**为什么不用「父 Chart 也放在 charts/ 目录下」的扁平结构？**
+
+```
+❌ 扁平结构（不推荐）：
+infrastructure/helm-charts/
+├── user-service/
+├── fund-service/
+├── umbrella/              ← 和子 Chart 混在同一级，关系不清
+└── ...
+
+✅ 分层 + 命名约定（本项目采用）：
+infrastructure/helm-charts/
+├── charts/                ← 「这里是子 Chart」
+│   ├── user-service/
+│   └── ...
+└── umbrella/              ← 「这是父 Chart，它引用 charts/ 下面的东西」
+```
+
+这样做的好处：
+
+1. **一眼能看出父子关系**——子 Chart 都在 `charts/` 下，父 Chart 单独命名为 `umbrella`
+2. **CI/CD 脚本清晰**——`helm lint ./umbrella/` 只 lint 父 Chart；`helm package ./charts/user-service/` 可以单独打子 Chart 的包
+3. **新建子服务有明确位置**——新同事加一个 `audit-service`，直接放到 `charts/` 下，然后在 umbrella 的 `Chart.yaml` 加一行依赖即可
+
+**「Umbrella」这个名字的来源：**
+
+在 Helm 社区，这种模式的标准叫法就是 **Umbrella Chart**（伞形 Chart）——它本身不定义业务资源，只负责「聚合」。这个命名和德国软件公司 SAP（这个项目要用到的 Kyma/K8S 环境）的 **Umbrella Helm Chart** 最佳实践是一脉相承的。
+
+> **一句话：`infrastructure` = 部署相关的东西都在这；`helm-charts` = Helm 部署的都在这里；`umbrella` = 那个一把伞罩住所有子服务的父 Chart。**
+
+##### 8.2.1.1 `charts/` 和 `umbrella/charts/` 的关系——源码 vs 构建产物
+
+这是理解 Helm 依赖管理最关键的一对概念：
+
+```
+infrastructure/helm-charts/
+├── charts/                          ← 【源码区】你手写、Git 追踪的源码
+│   ├── user-service/
+│   │   ├── Chart.yaml               ← 手写元数据
+│   │   ├── values.yaml              ← 手写默认配置
+│   │   └── templates/
+│   │       ├── _helpers.tpl         ← 手写命名模板
+│   │       ├── deployment.yaml      ← 手写 Deployment 模板
+│   │       └── service.yaml         ← 手写 Service 模板
+│   ├── fund-service/
+│   └── ... (其他 5 个子 Chart)
+│
+└── umbrella/
+    ├── Chart.yaml                   ← dependencies 声明: file://../charts/user-service
+    └── charts/                      ← 【构建产物区】helm dep update 自动生成
+        ├── user-service-0.1.0.tgz   ← 从 ../charts/user-service/ 打包而来
+        ├── fund-service-0.1.0.tgz   ← 从 ../charts/fund-service/ 打包而来
+        └── ... (其他 5 个 .tgz)
+```
+
+**它们的关系可以用一个流程图清晰描述：**
+
+```
+你手写的源码                          自动生成的构建产物
+──────────────                      ──────────────────
+charts/user-service/                 umbrella/charts/user-service-0.1.0.tgz
+  ├── Chart.yaml        helm dep       ├── Chart.yaml
+  ├── values.yaml       ───────────→   ├── values.yaml
+  └── templates/        update         └── templates/
+      ├── deployment.yaml                  ├── deployment.yaml
+      └── service.yaml                     └── service.yaml
+
+本质: 源码 tar.gz 打包 → 放到父 Chart 的 charts/ 目录下 → Helm 运行时从 .tgz 读取
+```
+
+**为什么两者都要存在？**——这是"源码"和"构建产物"的经典分离：
+
+| 维度 | `charts/`（源码） | `umbrella/charts/`（构建产物） |
+|---|---|---|
+| **作用** | 你开发和维护 Chart 的地方 | Helm 运行时实际读取的地方 |
+| **内容** | 散文件（Chart.yaml + values.yaml + templates/*.yaml） | 打包好的 .tgz 压缩文件 |
+| **产生方式** | 手写/IDE 编辑 | `helm dependency update` 自动生成 |
+| **可否手改** | ✅ 这是你改的地方 | ❌ 改了下次 `helm dep update` 就覆盖 |
+| **提交 Git？** | ✅ 必须提交 | ❌ 不提交（类比 .class 文件不提交） |
+| **被谁读取** | 你（开发者） | Helm（运行时） |
+
+**一个精确的类比——Maven 的源码 vs 构建产物：**
+
+```
+Maven 工作流:                               Helm 工作流:
+─────────────                               ─────────────
+src/main/java/UserService.java              charts/user-service/
+  (你手写的源码)                               (你手写的 Chart 源码)
+       │                                            │
+       │ mvn compile                         │ helm dependency update
+       ▼                                            ▼
+target/classes/UserService.class             umbrella/charts/user-service-0.1.0.tgz
+  (编译产物，不提交 Git)                        (打包产物，不提交 Git)
+       │                                            │
+       │ mvn package                          │ helm package
+       ▼                                            ▼
+target/user-service.jar                      smart-invest-0.2.0.tgz
+  (可分发的包)                                  (可推到 OCI Registry 的最终包)
+       │                                            │
+       │ mvn install                          │ helm push oci://...
+       ▼                                            ▼
+~/.m2/repository/.../user-service-1.0.jar    registry.example.com/charts/smart-invest:0.2.0
+  (本地缓存，类比 umbrella/charts/ 的作用)       (远程仓库，类比 Maven Central / Nexus)
+```
+
+##### 8.2.1.2 `umbrella/charts/` 下的 .tgz 会被上传到 Helm Registry 吗？
+
+**不会直接上传。** 分两种情况说清楚：
+
+**情况一：只依赖本地 file:// 路径（本项目就是这样）**
+
+```yaml
+# umbrella/Chart.yaml 里的依赖声明:
+dependencies:
+  - name: user-service
+    version: 0.1.0
+    repository: "file://../charts/user-service"    # ← 本地路径
+```
+
+当你执行 `helm package ./umbrella/` 打包父 Chart 时：
+
+```
+helm package ./umbrella/
+  → 1. 读取 umbrella/Chart.yaml
+  → 2. 看到 dependencies 里有 7 个子 Chart
+  → 3. 把 umbrella/charts/ 里的 7 个 .tgz 一起打入最终的 smart-invest-0.2.0.tgz
+  → 4. 所以最终 .tgz 里已经包含了所有子 Chart！
+
+最终的 smart-invest-0.2.0.tgz：
+  ├── Chart.yaml
+  ├── values.yaml
+  ├── templates/
+  │   ├── secret.yaml
+  │   └── ingress.yaml
+  └── charts/                         ← 子 Chart .tgz 也打包进去了！
+      ├── user-service-0.1.0.tgz
+      ├── fund-service-0.1.0.tgz
+      └── ...
+```
+
+所以上传到 OCI Registry 的是**包含所有子 Chart 的完整父 Chart .tgz**。`umbrella/charts/` 本身不直接上传，但它的内容被包含在父 Chart 包里一起上传了。
+
+**情况二：依赖远程仓库（如 Bitnami 的 Redis）**
+
+```yaml
+dependencies:
+  - name: redis
+    version: 20.0.5
+    repository: "https://charts.bitnami.com/bitnami"   # ← 远程 URL
+```
+
+`helm dependency update` 从远程仓库下载 `redis-20.0.5.tgz` 到 `umbrella/charts/`。打包父 Chart 时同样会把这 .tgz 打入最终包。消费者 `helm install` 你的 Chart 时**不需要**添加 Bitnami 仓库——因为子 Chart 已经在包里了。
+
+**两种情况的总结：**
+
+| 依赖类型 | `umbrella/charts/` 作用 | 上传到 Registry 的是 |
+|--------|------------------------|-------------------|
+| `file://` 本地依赖 | 打包时的中间产物 | 包含所有子 Chart 的**父 Chart .tgz** |
+| `https://` 远程依赖 | 下载的缓存 + 打包原料 | 同上——子 Chart 被打入父 Chart 包 |
+
+**类比——Maven 的 .jar 与 Helm 的 .tgz：**
+
+| | Maven | Helm |
+|---|---|---|
+| **源码** | `src/main/java/*.java` | `charts/user-service/*.yaml` |
+| **编译/打包中间产物** | `target/classes/*.class` | `umbrella/charts/user-service-0.1.0.tgz` |
+| **最终分发物** | `target/user-service.jar` | `smart-invest-0.2.0.tgz`（父 Chart 包） |
+| **本地缓存** | `~/.m2/repository/` | `umbrella/charts/` |
+| **远程仓库** | Maven Central / Nexus | OCI Registry / Helm Repo |
+| **安装命令** | `mvn install` | `helm dependency update` |
+| **发布命令** | `mvn deploy` | `helm push oci://...` |
+
+> **一句话：`umbrella/charts/` 就是 Helm 版的 `~/.m2/repository/`——本地构建缓存 + 打包原料。它不会直接上传到 Registry，但它的内容会被打入最终的分发包。**
+
+##### 8.2.1.3 `infrastructure/` 下 Terraform 文件的「同名双份」之谜
+
+你可能会困惑：为什么 `infrastructure/` 根目录和 `infrastructure/terraform-k3s/` 下都有同名的 Terraform 文件？
+
+```
+infrastructure/                       ← AWS 云资源版（Terraform 的经典用法）
+├── .terraform.lock.hcl               ← AWS provider 锁定（hashicorp/aws ~> 5.0）
+├── main.tf                           ← 创建 VPC + IAM + RDS + EC2 + S3/CloudFront 模块
+├── providers.tf                      ← 声明 aws provider + us-east-1 区域
+├── outputs.tf                        ← 输出 EC2 公网 IP、CloudFront 域名、RDS 端点
+└── variables.tf                      ← AWS 区域、管理员 CIDR、密钥对名称、账号 ID
+
+infrastructure/terraform-k3s/         ← K3S 集群资源版（学习/演示用）
+├── .terraform.lock.hcl               ← Kubernetes + Helm provider 锁定
+├── main.tf                           ← 创建 Namespace + ConfigMap + Secret + Deployment（以 user-service 为例）
+├── outputs.tf                        ← 输出 Namespace 名、Deployment 名、下一步指引
+└── variables.tf                      ← kubeconfig 路径、数据库地址、密码、JWT Secret
+```
+
+**两套文件的职责完全不同——它们操作的是不同的 API：**
+
+| 维度 | `infrastructure/`（AWS 版） | `infrastructure/terraform-k3s/`（K3S 版） |
+|---|---|---|
+| **管理什么** | 云基础设施（VPC、EC2、RDS、S3、IAM） | K8S 集群内部资源（Namespace、Deployment、Secret） |
+| **调什么 API** | AWS API（`hashicorp/aws` provider） | K8S API Server（`hashicorp/kubernetes` + `hashicorp/helm` provider） |
+| **目标机器** | AWS 云（us-east-1） | 华硕 K3S 服务器（192.168.31.192:6443） |
+| **认证方式** | AWS Access Key / IAM Role | kubeconfig 文件（`~/.kube/k3s.yaml`） |
+| **典型命令** | `terraform plan` / `terraform apply`（在 AWS 创建资源） | `KUBECONFIG=~/.kube/k3s.yaml terraform plan`（在 K3S 里创建资源） |
+| **实际用途** | 真正的 IaC（基础设施即代码）——自动化创建 AWS 资源 | **学习资料**——演示 Terraform 也能管 K8S 资源（但本项目生产用 Helm） |
+
+**文件级别对比——同样的文件名，完全不同的内容：**
+
+**1. `main.tf` 对比：**
+
+```
+infrastructure/main.tf              infrastructure/terraform-k3s/main.tf
+─────────────────────────────────   ───────────────────────────────────────
+module "vpc" { ... }               resource "kubernetes_namespace" "app" { ... }
+module "iam" { ... }               resource "kubernetes_config_map" "app_config" { ... }
+module "rds" { ... }               resource "kubernetes_secret" "app_secrets" { ... }
+module "ec2" { ... }               resource "kubernetes_deployment" "user_service" { ... }
+module "s3_cloudfront" { ... }
+─────────────────────────────────   ───────────────────────────────────────
+操作对象: AWS 云资源                    操作对象: K3S 集群内的 K8S 资源
+```
+
+**2. `providers.tf` 对比：**
+
+```
+infrastructure/providers.tf         infrastructure/terraform-k3s/（在 main.tf 顶部）
+─────────────────────────────────   ───────────────────────────────────────
+terraform {                         terraform {
+  required_providers {                required_providers {
+    aws = {                             kubernetes = { source = "hashicorp/kubernetes" }
+      source = "hashicorp/aws"          helm       = { source = "hashicorp/helm" }
+    }                                 }
+  }                                 }
+}                                 }
+provider "aws" {                    provider "kubernetes" { config_path = var.kubeconfig_path }
+  region = var.aws_region           provider "helm"       { kubernetes { config_path = ... } }
+}
+─────────────────────────────────   ───────────────────────────────────────
+连 AWS API（us-east-1）              连 K3S API Server（192.168.31.192:6443）
+```
+
+**3. `variables.tf` 对比：**
+
+```
+infrastructure/variables.tf         infrastructure/terraform-k3s/variables.tf
+─────────────────────────────────   ───────────────────────────────────────
+aws_region  = "us-east-1"          kubeconfig_path = "~/.kube/config"
+environment = "prod"               postgres_host   = "192.168.31.192"
+admin_cidr  = "x.x.x.x/32"        db_password     = "..." (base64)
+key_pair_name = "..."              jwt_secret      = "..." (base64)
+account_id  = "..."                image_tag       = "latest"
+                                   replicas        = 1
+─────────────────────────────────   ───────────────────────────────────────
+「AWS 账号 + 网络」的变量               「K3S 连接 + 应用配置」的变量
+```
+
+**4. `outputs.tf` 对比：**
+
+```
+infrastructure/outputs.tf           infrastructure/terraform-k3s/outputs.tf
+─────────────────────────────────   ───────────────────────────────────────
+ec2_public_ip                       namespace = "smart-invest"
+cloudfront_domain                   user_service_deployment
+db_endpoint                         user_service_image
+db_secret_arn                       usage（下一步指引文本）
+─────────────────────────────────   ───────────────────────────────────────
+「创建了哪些云资源」的输出               「在 K3S 里创建了什么」的输出
+```
+
+**它们的关系——分层协作，不是重复：**
+
+```
+         ┌──────────────────────────────────────────┐
+         │  infrastructure/   (AWS Terraform)        │
+         │  terraform apply                          │
+         │  → 创建 EC2 实例                          │
+         │  → 配置安全组（开放 6443/30080/30090）      │
+         │  → 创建 RDS 数据库                        │
+         │  → 输出: ec2_public_ip = 192.168.31.192   │
+         └──────────────────┬───────────────────────┘
+                            │
+                            │ 拿到 EC2 IP 后，手动在上面装 K3S
+                            ▼
+         ┌──────────────────────────────────────────┐
+         │  华硕 K3S 服务器 (192.168.31.192)         │
+         │  curl -sfL https://get.k3s.io | sh -      │
+         │  → K3S 集群就绪                           │
+         └──────────────────┬───────────────────────┘
+                            │
+                            │ 此时 K3S 已运行，可以对它部署
+                            ▼
+         ┌──────────────────────────────────────────┐
+         │  infrastructure/terraform-k3s/ (学习版)    │
+         │  KUBECONFIG=~/.kube/k3s.yaml terraform apply│
+         │  → 在 K3S 里创建 Namespace + Deployment    │
+         │                                            │
+         │  ⚠️ 实际项目走 Helm（不是这个 Terraform）:   │
+         │  helm upgrade --install smart-invest \     │
+         │    ./helm-charts/umbrella/                 │
+         │  → 在 K3S 里部署 7 个微服务 + Ingress       │
+         └──────────────────────────────────────────┘
+```
+
+**为什么 `terraform-k3s/` 要有独立的 `.terraform.lock.hcl`？**
+
+Terraform 的 `.terraform.lock.hcl` 是按**工作目录**隔离的——每个 `terraform init` 的目录有自己的一份。两个目录用的 provider 完全不同：
+
+```
+infrastructure/.terraform.lock.hcl           infrastructure/terraform-k3s/.terraform.lock.hcl
+──────────────────────────────────────      ──────────────────────────────────────────────
+hashicorp/aws        ~> 5.0                 hashicorp/kubernetes  ~> 2.30
+  version: 5.100.0                            version: 2.38.0
+                                            hashicorp/helm        ~> 2.14
+                                              version: 2.17.0
+──────────────────────────────────────      ──────────────────────────────────────────────
+锁定 AWS provider 版本                        锁定 K8S + Helm provider 版本
+```
+
+> **一句话总结：它们是两个完全独立的 Terraform 项目。`infrastructure/` 管 AWS 云资源（"集群从哪来"），`infrastructure/terraform-k3s/` 演示 Terraform 也能管 K8S 资源（"集群里跑什么"）——但在本项目中，后者只是学习资料，真正的应用部署走 Helm。**
+
+### 8.3 CI/CD 集成示例
 
 ```yaml
 # GitHub Actions / Jenkins Pipeline 示例
