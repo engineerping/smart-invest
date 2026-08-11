@@ -422,3 +422,120 @@ helm -n smart-invest uninstall smart-invest
 
 ---
 
+## 5. Issue 5: Terraform Deleted Manually-Added Security Group Rule
+
+### 5.1. Symptom
+
+```bash
+terraform plan
+```
+
+输出显示 `module.networking.aws_security_group.smart_invest` 会被修改，**删掉** 80 端口的 ingress 规则：
+
+```
+  - ingress = [
+      - {
+          - cidr_blocks  = ["0.0.0.0/0"]
+          - from_port    = 80
+          - to_port      = 80
+          ...
+        },
+      ...
+    ]
+```
+
+执行 `terraform apply` 后，`http://46.137.250.243/login` 返回 502/连接拒绝。
+
+### 5.2. Root Cause（通俗解释）
+
+你之前在 AWS Console 或 CLI 里手动给安全组加了一条 80 端口规则。这条规则存在于 AWS 中，但不在 Terraform 代码（`.tf` 文件）里。
+
+Terraform 的工作方式是**声明式（declarative）**——不是 "在现有基础上追加"，而是 "把现实改造成代码描述的样子"：
+
+```
+你的 .tf 代码说：安全组只有 22, 443, 6443, 8080 端口
+AWS 实际上：     安全组有 22, 443, 6443, 8080, 80 端口  ← 多了一个手动的 80
+                         │
+Terraform：       我的代码里没有 80 → 这个一定是垃圾 → 删掉它
+                         │
+结果：            安全组变成 22, 443, 6443, 8080 → 80 端口不通了！
+```
+
+> **类比 Git：** 你手动改了服务器上的文件，然后 `git pull` 覆盖了你的改动。Terraform 就是基础设施的 Git——代码是唯一的真相来源（single source of truth），手动改的东西会被覆盖。
+
+### 5.3. Fix
+
+在 Terraform 安全组代码里加上 80 端口规则，让它成为"官方定义"的一部分：
+
+```hcl
+# infrastructure/terraform/modules/networking/main.tf
+ingress {
+  from_port   = 80
+  to_port     = 80
+  protocol    = "tcp"
+  cidr_blocks = ["0.0.0.0/0"]
+  description = "HTTP (Traefik Ingress)"
+}
+```
+
+> **核心教训：凡是 Terraform 管理的资源，不要手动改。要么改 .tf 代码然后用 `terraform apply`，要么别用 Terraform 管这个资源。**
+
+---
+
+## 6. Frontend Deployment Flow: Build → S3 → CloudFront
+
+### 6.1. Full Deployment Commands
+
+部署成功后（Helm 部署完、Pod 都 Running），每次更新前端需要走三步：
+
+```bash
+# 第一步：构建前端
+cd frontend
+npm run build
+
+# 第二步：同步到 S3（--delete 会删掉 S3 里多余的旧文件）
+aws s3 sync ./dist s3://smart-invest-frontend-service-prod-bucket-name \
+  --region ap-southeast-1 \
+  --delete
+
+# 第三步：刷新 CloudFront 缓存（让边缘节点拉新文件）
+aws cloudfront create-invalidation \
+  --distribution-id ES0ZIR6UJOY98 \
+  --paths "/*"
+```
+
+### 6.2. Why Each Step Is Needed
+
+| 步骤 | 为什么需要 | 跳过会怎样 |
+|------|-----------|-----------|
+| `npm run build` | 把 TypeScript/JSX 编译成浏览器能运行的 HTML/CSS/JS | 没产物可以上传 |
+| `aws s3 sync` | 把编译产物上传到 S3（前端静态文件的存储） | 用户看到的还是旧版 |
+| `cloudfront create-invalidation` | CloudFront 默认缓存 24 小时（TTL），不刷新的话全球边缘节点还在用旧缓存 | 用户看到旧版，直到缓存过期 |
+
+### 6.3. CloudFront Cache Invalidation — Why It's Mandatory
+
+```
+用户访问 https://d2hoqnqufe8qq0.cloudfront.net
+  → CloudFront 边缘节点（新加坡/东京/...）
+    → 如果缓存里有 index.html → 直接返回（旧版！）
+    → 如果缓存里没有 → 回源到 S3 拉最新 → 缓存 TTL 时间
+```
+
+`create-invalidation "/*"` = 告诉 CloudFront："所有文件（`/*`）的缓存全部作废，重新回 S3 拉"。
+
+Terraform 刚才也把 CloudFront 的 TTL 从 `0` 改成了 `3600`（1 小时 default TTL）和 `86400`（1 天 max TTL），这样普通用户访问会更快，但也意味着**每次部署前端后必须做 invalidation**。
+
+### 6.4. Verify Deployment
+
+```bash
+# 看 S3 里的文件是否是新的
+aws s3 ls s3://smart-invest-frontend-service-prod-bucket-name \
+  --region ap-southeast-1 \
+  --recursive \
+  --human-readable
+```
+
+检查 `index.html` 和 `assets/index-*.js` 的修改时间是否是刚才上传的。
+
+---
+
