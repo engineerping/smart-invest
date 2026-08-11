@@ -23,7 +23,7 @@ variable "ami_id_override" {
 variable "ebs_volume_size" {
   description = "EC2 系统盘大小（GB）。建议至少 20GB，给 K3S + Docker 镜像留足空间"
   type        = number
-  default     = 20
+  default     = 30
 }
 
 variable "key_pair_name" {
