@@ -50,7 +50,7 @@ metadata:
     #   hook-succeeded：成功后删除 Job 的 Pod（当前设定，节省资源）
     #   before-hook-creation：新 Hook 创建前删除旧的
     #   hook-failed：失败后保留（方便查看日志排查问题）
-    "helm.sh/hook-delete-policy": hook-succeeded
+    "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
 
 spec:
   # ─── backoffLimit: 重试次数 ───
