@@ -1,11 +1,13 @@
 #!/bin/bash
 # ==============================================================================
-# Terraform Import 脚本 —— 将已存在的 AWS 资源导入 Terraform 管理
+# 对应的自动化版本是 /Users/gcsp/coding/claude_code_workspace/smart-invest/infrastructure/terraform/live/prod/import.py
+# Terraform Import 脚本（手动版）—— 将已存在的 AWS 资源导入 Terraform 管理
 # ==============================================================================
 #
 # 使用方式：
-#   chmod +x import.sh
-#   ./import.sh
+#   1. 先运行下面的 AWS CLI 命令获取各资源 ID
+#   2. 将 ID 替换掉脚本中的占位符
+#   3. chmod +x import_manual.sh && ./import_manual.sh
 #
 # 前置条件：
 #   1. cp terraform.tfvars.example terraform.tfvars（已编辑好变量）
@@ -33,7 +35,7 @@
 set -e  # 任何命令失败就停止（安全机制）
 
 echo "================================================"
-echo "  Smart Invest — AWS 资源导入脚本"
+echo "  Smart Invest — AWS 资源导入脚本（手动版）"
 echo "================================================"
 echo ""
 echo "导入顺序：安全组 → EC2 → WAF → S3 → CloudFront"
@@ -50,7 +52,11 @@ read -p "以上是你的目标 AWS 账号吗？按 Enter 继续 / Ctrl+C 取消"
 # 1. 安全组 —— 最先导入（EC2 依赖它）
 # ══════════════════════════════════════════════════════════════════════
 # 替换 sg-xxxxxxxxxxxx 为你的实际安全组 ID
-echo ">>> [1/4] 导入安全组..."
+echo ">>> [1/6] 导入安全组..."
+
+# 查你的安全组 ID：
+# aws ec2 describe-security-groups --query "SecurityGroups[*].[GroupId,GroupName,Description]" --output table
+
 terraform import \
   aws_security_group.smart_invest \
   sg-xxxxxxxxxxxx  # ⚠️ 替换为你的安全组 ID
@@ -58,38 +64,59 @@ terraform import \
 # ══════════════════════════════════════════════════════════════════════
 # 2. EC2 实例 —— 核心资源
 # ══════════════════════════════════════════════════════════════════════
-# 替换 i-xxxxxxxxxxxx 为你的实际 EC2 实例 ID
-echo ">>> [2/5] 导入 EC2 实例..."
+echo ">>> [2/6] 导入 EC2 实例..."
+
+# 查你的 EC2 实例 ID：
+# aws ec2 describe-instances --query "Reservations[*].Instances[*].[InstanceId,InstanceType,Tags[?Key=='Name'].Value|[0]]" --output table
+
 terraform import \
   aws_instance.k3s_server \
   i-xxxxxxxxxxxx  # ⚠️ 替换为你的 EC2 实例 ID
 
-# ─── EC2 弹性 IP ───
-echo ">>> [3/5] 导入弹性 IP..."
+# ══════════════════════════════════════════════════════════════════════
+# 3. 弹性 IP —— 依附于 EC2
+# ══════════════════════════════════════════════════════════════════════
+echo ">>> [3/6] 导入弹性 IP..."
+
+# 查你的弹性 IP allocation ID：
+# aws ec2 describe-addresses --query "Addresses[*].[AllocationId,PublicIp,InstanceId]" --output table
+
 terraform import \
   aws_eip.k3s \
   eipalloc-xxxxxxxxxxxx  # ⚠️ 替换为你的 EIP allocation ID
 
 # ══════════════════════════════════════════════════════════════════════
-# 3. WAF Web ACL —— 必须在 us-east-1（CloudFront 硬性要求）
+# 4. WAF Web ACL —— 必须在 us-east-1（CloudFront 硬性要求）
 # ══════════════════════════════════════════════════════════════════════
-echo ">>> [4/5] 导入 WAF Web ACL..."
+echo ">>> [4/6] 导入 WAF Web ACL..."
+
+# 查你的 WAF Web ACL ID：
+# aws wafv2 list-web-acls --scope CLOUDFRONT --region us-east-1 --query "WebACLs[*].[Id,Name]" --output table
+
 terraform import \
   aws_wafv2_web_acl.cloudfront_waf \
   xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx  # ⚠️ 替换为你的 WAF Web ACL ID
 
 # ══════════════════════════════════════════════════════════════════════
-# 4. S3 存储桶
+# 5. S3 存储桶
 # ══════════════════════════════════════════════════════════════════════
-echo ">>> [5/5] 导入 S3 存储桶..."
+echo ">>> [5/6] 导入 S3 存储桶..."
+
+# 查你的 S3 桶名列表：
+# aws s3api list-buckets --query "Buckets[*].Name" --output table
+
 terraform import \
   aws_s3_bucket.frontend \
-  smart-invest-frontend-service-prod-bucket-name  # ⚠️ 替换为你的 S3 桶名
+  your-bucket-name-here  # ⚠️ 替换为你的 S3 桶名
 
 # ══════════════════════════════════════════════════════════════════════
-# 5. CloudFront Distribution
+# 6. CloudFront Distribution
 # ══════════════════════════════════════════════════════════════════════
 echo ">>> [6/6] 导入 CloudFront Distribution..."
+
+# 查你的 CloudFront Distribution ID：
+# aws cloudfront list-distributions --query "DistributionList.Items[*].[Id,DomainName,Comment]" --output table
+
 terraform import \
   aws_cloudfront_distribution.main \
   EXXXXXXXXXXXX  # ⚠️ 替换为你的 CloudFront Distribution ID

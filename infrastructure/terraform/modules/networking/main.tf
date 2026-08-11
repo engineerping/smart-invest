@@ -107,96 +107,40 @@ data "aws_internet_gateway" "default" {
 #   - cidr_blocks：来源/目标 IP 段（0.0.0.0/0 = 全互联网）
 # ==============================================================================
 resource "aws_security_group" "smart_invest" {
-  # 安全组的名称和描述（建议用项目名做前缀，方便在控制台找）
   name        = "${var.project_name}-security-group"
-  description = "Smart Invest 服务安全组 —— 控制进出 EC2 的流量"
+  description = "Smart Invest backend security group "
   vpc_id      = data.aws_vpc.default.id
 
-  # ══════════════════════════════════════════════════════════════════════
-  # 入站规则（Ingress）—— 允许哪些流量进入 EC2
-  # ══════════════════════════════════════════════════════════════════════
-
-  # ─── 规则 1：允许 K3S API Server 端口 ───
-  # K3S 的 API Server 默认监听 6443，kubectl / helm 通过这个端口管理集群。
-  # 如果只在 EC2 本机操作 kubectl，可以限制为 127.0.0.1/32。
+  # ─── 规则 1：应用端口 8080（CloudFront 回源）───
   ingress {
-    description = "K3S API Server 端口（kubectl/helm 管理集群用）"
-    from_port   = 6443
-    to_port     = 6443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # ⚠️ 生产环境建议限制为你自己的 IP
-  }
-
-  # ─── 规则 2：HTTP（80 端口）───
-  # CloudFront → EC2 的流量走这个端口（如果前面有 CDN）。
-  # 或者也可以直接暴露给浏览器（临时调试用）。
-  ingress {
-    description = "HTTP 流量（CloudFront 回源或直接访问）"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  # ─── 规则 3：应用端口 8080 ───
-  # Spring Boot API Gateway 的默认端口。
-  # CloudFront 的 custom origin 回源到这个端口。
-  ingress {
-    description = "Spring Boot API Gateway 端口（CloudFront 回源口）"
+    description = "the request from cloudFront"
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # ⚠️ 生产环境建议限制为 CloudFront IP 段
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # ─── 规则 4：HTTPS（443 端口）───
-  # 如果将来直接配 SSL 证书到 EC2（不用 CloudFront），需要开这个。
-  # 当前架构通过 CloudFront 回源到 8080，这个端口暂时不需要。
+  # ─── 规则 2：SSH（22 端口）───
   ingress {
-    description = "HTTPS 流量（如将来直接在 EC2 上配 SSL）"
-    from_port   = 443
-    to_port     = 443
+    description = "Any IP for github actions to connect"
+    from_port   = 22
+    to_port     = 22
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # ─── 规则 5：SSH（22 端口）───
-  # 远程登录管理 EC2 用。
-  # ⚠️ 安全最佳实践：把 0.0.0.0/0 替换为你的固定 IP，如 "203.0.113.5/32"
-  #   如果不确定自己的 IP，用 curl ifconfig.me 查看。
-  ingress {
-    description = "SSH 远程登录"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # ⚠️ 生产环境强烈建议改为你的固定 IP
-  }
-
-  # ─── 规则 6：K3S NodePort 范围（30000-32767）───
-  # K3S 的 Service（NodePort 类型）会使用这个端口段。
-  # 如果你用 LoadBalancer/Ingress 暴露服务，就不需要这个。
-  ingress {
-    description = "K3S NodePort 服务端口范围"
-    from_port   = 30000
-    to_port     = 32767
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"] # ⚠️ 生产建议只开需要的 NodePort
-  }
-
-  # ══════════════════════════════════════════════════════════════════════
-  # 出站规则（Egress）—— 允许 EC2 访问哪些外部服务
-  # ══════════════════════════════════════════════════════════════════════
-  # 默认放行所有出站流量（EC2 可以自由访问互联网下载依赖、Docker 镜像等）。
-  # -1 表示所有协议（TCP + UDP + ICMP）。
+  # ─── 出站规则（Egress）───
   egress {
     from_port   = 0
     to_port     = 0
-    protocol    = "-1"          # -1 = 所有协议
-    cidr_blocks = ["0.0.0.0/0"] # 允许访问整个互联网
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   tags = {
     Name    = "${var.project_name}-security-group"
     Project = var.project_name
   }
+  lifecycle { create_before_destroy = true }
+  revoke_rules_on_delete = false
 }

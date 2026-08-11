@@ -1,0 +1,169 @@
+# ==============================================================================
+# 🗄️ StatefulSet —— PostgreSQL 数据库的部署清单
+# ==============================================================================
+#
+# 📖 为什么用 StatefulSet 而不是 Deployment：
+#
+#   ┌──────────────────┬──────────────────────┬──────────────────────────┐
+#   │ 特性             │ Deployment           │ StatefulSet              │
+#   ├──────────────────┼──────────────────────┼──────────────────────────┤
+#   │ Pod 命名         │ user-abc123 (随机)    │ postgresql-0, -1 (有序)  │
+#   │ Pod DNS 名       │ 不可预测              │ postgresql-0.svc.ns.svc  │
+#   │ PVC 管理         │ 所有 Pod 共享一个 PVC │ 每个 Pod 独享一个 PVC    │
+#   │ 启停顺序         │ 并行（同时启动）       │ 有序（0 → 1 → 2）       │
+#   │ 适用场景         │ 无状态应用            │ 数据库、消息队列等      │
+#   └──────────────────┴──────────────────────┴──────────────────────────┘
+#
+# 📖 持久化数据流：
+#   StatefulSet 声明 volumeClaimTemplates
+#     → K3S 自动为每个 Pod 创建独立 PVC（如 data-postgresql-0）
+#     → K3S local-path-provisioner 自动创建 PV（节点本地目录）
+#     → Pod 重启/重建，同一个 PVC 重新挂载 → 数据完好
+#
+# 📖 数据备份提醒：
+#   虽然 PVC 保证了重启不丢数据，但 EC2 本地磁盘坏了就什么都没了。
+#   需要定期备份：
+#     kubectl exec -n smart-invest postgresql-0 -- pg_dump -U smartadmin smartinvest | gzip > backup.sql.gz
+#     aws s3 cp backup.sql.gz s3://your-backup-bucket/
+# ==============================================================================
+
+apiVersion: apps/v1
+kind: StatefulSet                       # ← 注意：StatefulSet，不是 Deployment！
+
+metadata:
+  name: {{ include "postgresql.fullname" . }}
+  labels:
+    {{- include "postgresql.labels" . | nindent 4 }}
+
+spec:
+  # ─── serviceName：必须指定一个 Headless Service（见 service.yaml）───
+  # StatefulSet 要求关联一个 Headless Service，用于给每个 Pod 分配固定的 DNS 名。
+  serviceName: {{ include "postgresql.fullname" . }}-headless
+
+  replicas: {{ .Values.replicaCount }}
+
+  # ─── podManagementPolicy：Pod 管理策略 ───
+  # OrderedReady（默认）：按顺序 0→1→2 启动，每个 Pod Ready 后才启动下一个
+  # Parallel：并行启动所有 Pod（适合不依赖顺序的服务）
+  # 数据库用 OrderedReady（默认），因为 replica 需要 primary 先起来。
+  podManagementPolicy: OrderedReady
+
+  selector:
+    matchLabels:
+      {{- include "postgresql.selectorLabels" . | nindent 6 }}
+
+  template:
+    metadata:
+      labels:
+        {{- include "postgresql.labels" . | nindent 8 }}
+    spec:
+      # ═══════════════════════════════════════════════════════════════════
+      # 容器定义
+      # ═══════════════════════════════════════════════════════════════════
+      containers:
+        - name: postgresql
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          ports:
+            - containerPort: {{ .Values.service.port }}
+              name: postgresql
+              protocol: TCP
+
+          # ═══════════════════════════════════════════════════════════════
+          # 环境变量 —— 从 Secret 注入敏感信息 + 非敏感信息直接写
+          # ═══════════════════════════════════════════════════════════════
+          env:
+            # ─── 非敏感：数据库名和用户名 ───
+            - name: POSTGRES_DB
+              value: {{ .Values.auth.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.auth.username | quote }}
+
+            # ─── 敏感：数据库密码（从 smart-invest-secrets Secret 读取）───
+            # 所有微服务共用同一个 Secret，集中管理。
+            # 注意：这里引用的 Secret key 是 SPRING_DATASOURCE_PASSWORD，
+            # 和 Spring Boot 的配置用同一个 key，避免重复配置。
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: smart-invest-secrets
+                  key: SPRING_DATASOURCE_PASSWORD
+
+          # ═══════════════════════════════════════════════════════════════
+          # 资源限制
+          # ═══════════════════════════════════════════════════════════════
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          # ═══════════════════════════════════════════════════════════════
+          # 持久化存储挂载
+          # ═══════════════════════════════════════════════════════════════
+          # Postgres 的数据目录是 /var/lib/postgresql/data（官方镜像约定）。
+          # 把这个路径挂载到 PVC，数据就落盘了。
+          volumeMounts:
+            - name: data                    # ← 对应 volumeClaimTemplates 里定义的卷名
+              mountPath: /var/lib/postgresql/data
+
+          # ═══════════════════════════════════════════════════════════════
+          # 就绪探针 —— 检查数据库是否准备好接受连接
+          # ═══════════════════════════════════════════════════════════════
+          # pg_isready 是 Postgres 自带的轻量级检查工具，不会写入数据。
+          # 返回 0 = 就绪，返回非 0 = 未就绪。
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.auth.username | quote }}
+                - -d
+                - {{ .Values.auth.database | quote }}
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          {{- end }}
+
+          # ═══════════════════════════════════════════════════════════════
+          # 存活探针 —— 检查数据库进程是否还活着
+          # ═══════════════════════════════════════════════════════════════
+          # 如果 pg_isready 连续失败，kubelet 会杀掉容器并重建。
+          # 和就绪探针用同一个命令，但参数更宽松（initialDelaySeconds 更长）。
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.auth.username | quote }}
+                - -d
+                - {{ .Values.auth.database | quote }}
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          {{- end }}
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # volumeClaimTemplates —— StatefulSet 的精髓！
+  # ═══════════════════════════════════════════════════════════════════════
+  # 和 Deployment 使用已有的 PVC 不同，StatefulSet 声明 volumeClaimTemplates，
+  # K3S 会自动为每个 Pod 创建独立 PVC。
+  #
+  # 例如 replicaCount = 2：
+  #   → 创建 PVC data-postgresql-0 和 data-postgresql-1
+  #   → 即使 Pod 被迁移到其他节点（K3S 单节点做不到，但概念上是这样），
+  #      PVC 也跟着 Pod 走（绑定的 PV 不同，但 PVC 名不变）
+  #
+  # 扩容时：新 Pod = 新的 PVC → 磁盘隔离（postgresql-1 有自己的数据目录）。
+  # 缩容时：PVC 不会被自动删除（防止误删数据），需要手动清理。
+  # ═══════════════════════════════════════════════════════════════════════
+  volumeClaimTemplates:
+    - metadata:
+        name: data                        # ← 对应上面 volumeMounts 里的 name
+        labels:
+          app: postgresql
+      spec:
+        accessModes:
+          - ReadWriteOnce                  # 单节点读写（local-path 的默认模式）
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size }}
+        # storageClassName 不显式写 → 用 K3S 默认的 local-path

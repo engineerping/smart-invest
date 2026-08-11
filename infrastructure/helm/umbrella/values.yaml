@@ -118,7 +118,7 @@ frontend:
     tag: "1.0.0"
     pullPolicy: IfNotPresent
 
-# ─── rabbitmq：消息队列（本地部署）───
+# ─── rabbitmq：消息队列 ───
 rabbitmq:
   replicaCount: 1
   fullnameOverride: rabbitmq
@@ -126,19 +126,40 @@ rabbitmq:
     port: 5672                       # AMQP 协议端口
     managementPort: 15672             # RabbitMQ 管理控制台端口
   persistence:
-    enabled: true                     # 持久化消息数据（Pod 重启不丢消息）
-    size: 5Gi                         # 持久卷大小
-  rabbitmq:
+    enabled: true                     # 持久化消息数据（PVC → EC2 本地磁盘）
+    size: 5Gi
+  # RabbitMQ 认证信息（会通过 umbrella secret 注入为环境变量）
+  auth:
     username: smartmq
-    defaultPass: localdev_only
 
 # ═════════════════════════════════════════════════════════════════════════════
-# 可选依赖的条件开关
+# 有状态中间件配置
 # ═════════════════════════════════════════════════════════════════════════════
-# 配合 Chart.yaml 中的 condition: redis.enabled
-# true → 安装 Redis 依赖 / false → 跳过
+# 这些中间件以 StatefulSet/Deployment + PVC 方式跑在 K3S 上，
+# 不依赖 AWS 托管服务（RDS / ElastiCache / Amazon MQ），成本为零。
+
+# ─── postgresql：关系数据库（StatefulSet + PVC）───
+# 替代 AWS RDS。数据存在 EC2 本地磁盘（K3S local-path-provisioner）。
+# ⚠️ 需要定期备份到 S3：pg_dump → gzip → s3 cp
+postgresql:
+  enabled: true                      # true = 用 K3S 上的 PostgreSQL（替代 RDS）
+  fullnameOverride: postgresql       # 集群内 DNS：postgresql.smart-invest.svc.cluster.local
+  auth:
+    database: smartinvest
+    username: smartadmin
+  persistence:
+    enabled: true
+    size: 5Gi                        # 5GB（学习环境足够，不够可扩容）
+
+# ─── redis：内存缓存（Deployment + PVC，可选）───
+# 替代 AWS ElastiCache。默认关闭（当前项目未使用 Redis 缓存）。
+# 需要时设为 enabled: true。
 redis:
-  enabled: false                     # 默认不装 Redis（暂时不需要）
+  enabled: false                     # 暂不需要 Redis，设为 true 即可开启
+  fullnameOverride: redis
+  persistence:
+    enabled: true
+    size: 2Gi
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Helm Install / Upgrade 建议参数

@@ -120,12 +120,12 @@ dependencies:
     version: 1.0.0
     repository: "file://../charts/rabbitmq"
 
-  # ─── 第三方中间件（https:// 远程仓库）───
-  # 使用方式：
-  #   1. helm repo add bitnami https://charts.bitnami.com/bitnami
-  #   2. helm dependency update
-  #   3. condition 控制是否安装（values 里 redis.enabled: true/false）
+  # ─── 有状态中间件（自带，不依赖 Bitnami）───
+  - name: postgresql
+    version: 1.0.0
+    repository: "file://../charts/postgresql"
+
   - name: redis
-    version: 21.0.0
-    repository: "https://charts.bitnami.com/bitnami"
+    version: 1.0.0
+    repository: "file://../charts/redis"
     condition: redis.enabled

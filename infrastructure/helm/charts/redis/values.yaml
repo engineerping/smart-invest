@@ -1,0 +1,60 @@
+# ==============================================================================
+# 📋 values.yaml —— Redis 子 Chart 的默认配置
+# ==============================================================================
+#
+# Redis 在项目中的角色：
+#   - 缓存热点数据（如基金净值、用户会话），减少数据库查询
+#   - 可选功能，不需要时 umbrella chart 里 redis.enabled: false 跳过
+# ==============================================================================
+
+replicaCount: 1                        # Redis 单实例（学习环境不需要集群）
+
+image:
+  repository: cgr.dev/chainguard/redis  # Chainguard 的 Redis 镜像（安全加固，无漏洞）
+  tag: "latest"                         # 生产环境应该指定具体版本
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP                       # 只在集群内访问
+  port: 6379                            # Redis 标准端口
+
+# ─── Redis 配置 ───
+redis:
+  # Redis 的 maxmemory 限制（防止 OOM）
+  # 注意：这是 Redis 进程可用的最大内存，不是 K8S limits.memory。
+  # maxmemory: 256mb
+
+  # 持久化模式：
+  #   - "no"    → 不持久化（纯缓存，重启全丢）
+  #   - "rdb"   → 定期快照（每隔 N 分钟/N 次变更保存一次）
+  #   - "aof"   → 追加日志（每次写入都记录，最安全但最慢）
+  #   - "rdb+aof" → 两者结合（推荐生产用）
+  save: "rdb"                          # 演示环境用 RDB 就够了
+
+# ─── 容器资源 ───
+# Redis 是单线程的（核心命令执行），CPU 不需要很多。
+# 但内存要大（数据全在内存里）。
+resources:
+  requests:
+    cpu: 50m                            # Redis 单线程，CPU 需求很低
+    memory: 128Mi                       # 最小内存分配
+  limits:
+    cpu: 500m                           # burst 上限
+    memory: 256Mi                       # 内存上限（Redis 数据全在这里）
+
+# ─── 持久化（可选）───
+# Redis 的数据在内存中，但也可以定期快照到磁盘。
+# 如果不需要持久化（纯缓存），设为 enabled: false。
+persistence:
+  enabled: true
+  size: 2Gi                             # RDB/AOF 文件通常不大
+  # 不指定 storageClass，用 K3S 默认的 local-path
+
+# ─── 健康检查 ───
+# redis-cli ping 是最简单的检查方式，返回 PONG 就说明 Redis 活着。
+livenessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 15
+readinessProbe:
+  initialDelaySeconds: 5
+  periodSeconds: 10

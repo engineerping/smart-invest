@@ -8,6 +8,12 @@ variable "project_name" {
   default     = "smart-invest"
 }
 
+variable "aws_region" {
+  description = "AWS 主部署区域"
+  type        = string
+  default     = "ap-southeast-1"
+}
+
 variable "s3_bucket_name" {
   description = "S3 存储桶名称（必须全局唯一，建议包含账号 ID）。例如：smart-invest-frontend-501264525584"
   type        = string

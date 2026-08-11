@@ -118,6 +118,6 @@ resource "aws_iam_role_policy_attachment" "ssm" {
 #   你可以把这个理解为 AWS 的"遗留设计"。
 # ==============================================================================
 resource "aws_iam_instance_profile" "ec2_profile" {
-  name = "${var.project_name}-ec2-profile"
+  name = "${var.project_name}-ec2-role"
   role = aws_iam_role.ec2_role.name
 }

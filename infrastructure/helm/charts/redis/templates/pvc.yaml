@@ -1,0 +1,24 @@
+# ==============================================================================
+# 💾 PersistentVolumeClaim —— Redis 数据的持久化存储
+# ==============================================================================
+# 和 RabbitMQ 的 PVC 一样，K3S local-path-provisioner 自动创建 PV。
+# 如果不需要持久化（纯缓存模式），可以不创建这个 PVC。
+# ==============================================================================
+
+{{- if .Values.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+
+metadata:
+  name: {{ include "redis.fullname" . }}-data
+  labels:
+    app: redis
+
+spec:
+  accessModes:
+    - ReadWriteOnce                  # 单节点读写
+  resources:
+    requests:
+      storage: {{ .Values.persistence.size }}
+  # storageClassName 不指定 → 用 K3S 默认 local-path
+{{- end }}

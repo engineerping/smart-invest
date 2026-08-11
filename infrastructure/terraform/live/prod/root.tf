@@ -68,6 +68,7 @@ module "cdn" {
   source = "../../modules/cdn"
 
   project_name    = var.project_name
+  aws_region      = var.aws_region
   s3_bucket_name  = var.s3_bucket_name
   ec2_public_dns  = module.compute.public_dns # CloudFront 回源到 EC2 需要这个
 

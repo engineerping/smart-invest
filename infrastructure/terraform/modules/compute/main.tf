@@ -146,9 +146,9 @@ resource "aws_instance" "k3s_server" {
   # 标签 —— 在 AWS 控制台中识别资源的元数据
   # ══════════════════════════════════════════════════════════════════════
   tags = {
-    Name    = "${var.project_name}-k3s-server" # 控制台显示的名称
+    Name    = "${var.project_name}-server"
     Project = var.project_name
-    Role    = "k3s-server"                   # 自定义标签：标识角色
+    Role    = "k3s-server"
   }
 
   # ══════════════════════════════════════════════════════════════════════
