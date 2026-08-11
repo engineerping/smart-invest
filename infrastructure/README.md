@@ -283,7 +283,7 @@ K3S 自带 **local-path-provisioner**（开箱即用），不需要手动创建 
 - **Redis** 用 Deployment —— 缓存丢失可以从数据库重建，不需要 StatefulSet 的有序特性
 - **RabbitMQ** 用 Deployment —— 已有 PVC 绑定，消息队列本身有持久化机制
 
-### 数据备份（重要！）
+### 数据备份（当前 project 是 demo project 不做数据备份,这一步可以忽略）
 
 由于 PVC 存在 EC2 本地磁盘上，EC2 被销毁 = 数据永久丢失。
 必须定期备份到 S3：
