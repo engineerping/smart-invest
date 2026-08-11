@@ -129,6 +129,16 @@ resource "aws_security_group" "smart_invest" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
+  # ─── 规则 3：K3s Kubernetes API（6443 端口）───
+  # kubectl 通过这个端口与 K3s API Server 通信。
+  ingress {
+    description = "K3s Kubernetes API server"
+    from_port   = 6443
+    to_port     = 6443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
   # ─── 出站规则（Egress）───
   egress {
     from_port   = 0
