@@ -1,0 +1,85 @@
+# ==============================================================================
+# 🚀 Deployment —— Redis 缓存的部署清单
+# ==============================================================================
+#
+# Redis 用 Deployment 而不是 StatefulSet：
+#   - Redis RDB/AOF 持久化是可选的（不像数据库那么关键）
+#   - 单节点部署，不需要 StatefulSet 的有序特性
+#   - Deployment 足够满足缓存 + 可选持久化的需求
+# ==============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+
+metadata:
+  name: {{ include "redis.fullname" . }}
+  labels:
+    {{- include "redis.labels" . | nindent 4 }}
+
+spec:
+  replicas: {{ .Values.replicaCount }}
+
+  selector:
+    matchLabels:
+      {{- include "redis.selectorLabels" . | nindent 6 }}
+
+  template:
+    metadata:
+      labels:
+        {{- include "redis.labels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: redis
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          ports:
+            - containerPort: {{ .Values.service.port }}
+              name: redis
+              protocol: TCP
+
+          # ═══════════════════════════════════════════════════════════════
+          # 资源限制
+          # ═══════════════════════════════════════════════════════════════
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          # ═══════════════════════════════════════════════════════════════
+          # 持久化存储挂载（可选）
+          # ═══════════════════════════════════════════════════════════════
+          # Redis 默认把 RDB 快照文件写在 /data 目录。
+          # 挂载 PVC 后，Pod 重启可以从 RDB 文件恢复数据。
+          # 如果不需要持久化（纯缓存），删除 volumeMounts + volumes。
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+
+          # ═══════════════════════════════════════════════════════════════
+          # 就绪探针 —— redis-cli ping 是最简单的健康检查
+          # ═══════════════════════════════════════════════════════════════
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+
+          # ═══════════════════════════════════════════════════════════════
+          # 存活探针
+          # ═══════════════════════════════════════════════════════════════
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+
+      # ═══════════════════════════════════════════════════════════════════
+      # 存储卷 —— 引用 PVC
+      # ═══════════════════════════════════════════════════════════════════
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: {{ include "redis.fullname" . }}-data

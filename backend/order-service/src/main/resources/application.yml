@@ -1,0 +1,50 @@
+# =============================================================================
+# order-service 配置
+# =============================================================================
+server:
+  port: 8083
+
+spring:
+  application:
+    name: order-service
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/smartinvest}
+    username: ${SPRING_DATASOURCE_USERNAME:smartadmin}
+    password: ${SPRING_DATASOURCE_PASSWORD:localdev_only}
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          time_zone: UTC
+  flyway:
+    enabled: false         # 迁移由 user-service 统一执行
+  rabbitmq:
+    host: ${RABBITMQ_HOST:localhost}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USERNAME:smartmq}
+    password: ${RABBITMQ_PASSWORD:localdev_only}
+
+jwt:
+  secret: ${JWT_SECRET:smartinvest-demo-secret-key-change-me-please-32bytes}
+  access-token-expiry-ms: 3600000
+
+# 服务间调用的目标地址（K8S 里是 Service DNS 名）
+services:
+  fund-service-url: ${FUND_SERVICE_URL:http://localhost:8082}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+logging:
+  level:
+    com.smartinvest: INFO

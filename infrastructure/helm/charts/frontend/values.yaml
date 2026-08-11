@@ -1,0 +1,35 @@
+replicaCount: 1
+
+image:
+  repository: gongchengship/smart-invest-frontend
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: "1"
+    memory: 128Mi
+
+# 前端是 nginx，没有 actuator，探针改为检查静态首页
+livenessProbe:
+  path: /
+  port: 80
+readinessProbe:
+  path: /
+  port: 80
+
+env: {}
+
+secretEnvRefs: []

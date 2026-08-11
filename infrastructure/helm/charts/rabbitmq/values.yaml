@@ -1,0 +1,56 @@
+# =============================================================================
+# 📋 values.yaml —— RabbitMQ 子 Chart 的默认配置
+# =============================================================================
+#
+# 📖 和 user-service 的 values.yaml 的区别:
+#   1. 多了 persistence → RabbitMQ 需要持久化, user-service 不需要
+#   2. 多了 auth       → RabbitMQ 连接凭据的注入方式
+#   3. 多了 service 多端口 → AMQP + 管理台 + Prometheus
+#   4. 没有 readiness/liveness probe → RabbitMQ 用 command/args 替代
+#   5. 没有 env/secretEnvRefs → RabbitMQ 的环境变量更简单 (只有默认用户/密码)
+# =============================================================================
+
+replicaCount: 1
+
+# ─── 镜像 ───
+# management-alpine = 带 Web 管理台的 Alpine 轻量版
+# 注意: 这里用的是 Docker Hub 官方镜像 (不是 bitnami),
+# 所以不需要额外的配置开销
+image:
+  repository: rabbitmq                      # 官方镜像 (不带 docker.io 前缀也行)
+  tag: 3.13-management-alpine               # management = 含 Web 管理台
+  pullPolicy: IfNotPresent
+
+# ─── 服务端口 ───
+# RabbitMQ 需要多个端口:
+#   5672  → AMQP 协议 (各微服务连这个消息队列的端口)
+#   15672 → Web 管理台 (浏览器打开看队列状态)
+#   15692 → Prometheus 指标端口 (监控系统拉数据)
+service:
+  amqpPort: 5672
+  managerPort: 15672
+
+# ─── 认证 ───
+# auth.username: 非敏感的 (直接写 values 里)
+# auth.passwordEnvRef: 敏感的 → 从 Secret 注入, 只写 key 名
+#   这和 user-service 的 secretEnvRefs 是同一个模式
+auth:
+  username: smartmq
+  passwordEnvRef: RABBITMQ_PASSWORD   # ← 指向 smart-invest-secrets 里的 key
+
+# ─── 容器资源 ───
+# RabbitMQ 默认内存消耗较小 (和 Java 服务相比)
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+# ─── 持久化 (RabbitMQ 特有) ───
+# enabled: true → 会创建 PVC, 消息数据落盘, 重启不丢
+# 如果设为 false, 可以用 emptyDir (Pod 删除后数据就没了)
+persistence:
+  enabled: true
+  size: 1Gi                             # Gi = 1024^3 bytes (G = 1000^3 bytes)

@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        order-service —— 交易微服务
+        =============================================================================
+        职责：下单（申购/赎回）、订单查询、结算、定时任务。
+        拥有表：orders
+        由原本的 order + scheduler 两个模块合并而成（定时结算依赖订单领域）。
+        关键交互：
+          - 下单时 REST 调用 fund-service 获取最新净值（同步，保证成交价一致）
+          - 结算完成后发布 RabbitMQ 事件 order.completed（异步，通知其他服务）
+        =============================================================================
+    -->
+
+    <parent>
+        <groupId>com.smartinvest</groupId>
+        <artifactId>smart-invest-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>order-service</artifactId>
+    <name>Smart Invest Order Service</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.smartinvest</groupId>
+            <artifactId>common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>false</skip>
+                    <mainClass>com.smartinvest.order.OrderServiceApplication</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

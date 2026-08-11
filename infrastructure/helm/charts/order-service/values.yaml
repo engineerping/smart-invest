@@ -1,0 +1,43 @@
+replicaCount: 1
+
+image:
+  repository: gongchengship/smart-invest-order-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+
+service:
+  type: ClusterIP
+  port: 8083
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    cpu: "1"
+    memory: 512Mi
+
+livenessProbe:
+  path: /actuator/health
+  port: 8083
+readinessProbe:
+  path: /actuator/health
+  port: 8083
+
+env:
+
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/smartinvest"
+  SPRING_DATASOURCE_USERNAME: "smartadmin"
+  RABBITMQ_HOST: "rabbitmq"
+  RABBITMQ_PORT: "5672"
+  SPRING_RABBITMQ_PORT: "5672"
+  SERVICES_FUND_SERVICE_URL: "http://fund-service:8082"
+
+secretEnvRefs:
+  - SPRING_DATASOURCE_PASSWORD
+  - JWT_SECRET

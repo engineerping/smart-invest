@@ -1,0 +1,63 @@
+# =============================================================================
+# api-gateway 配置 —— 统一路由
+# =============================================================================
+# 前端只认这一个入口（/api/**），网关按第一段路径分发到后端服务。
+# K8S 里各服务用 Service DNS 名访问：http://user-service:8081 等。
+# 生产环境通常还会在网关层做认证、限流、灰度，这里保持简洁（透传 JWT）。
+# =============================================================================
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  cloud:
+    gateway:
+      # 跨域统一放行（演示环境，生产应限定前端域名）
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns: "*"
+            allowedMethods: [GET, POST, PUT, DELETE, OPTIONS]
+            allowedHeaders: "*"
+            allowCredentials: true
+      routes:
+        # 用户服务：认证、用户资料、风险测评
+        - id: user-service
+          uri: ${USER_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/auth/**,/api/users/**,/api/risk/**
+
+        # 基金服务：基金、持仓、组合、定投计划
+        - id: fund-service
+          uri: ${FUND_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/funds/**,/api/holdings/**,/api/portfolio/**,/api/plans/**
+
+        # 订单服务
+        - id: order-service
+          uri: ${ORDER_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/orders/**
+
+        # 通知服务
+        - id: notification-worker
+          uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/api/notifications/**
+
+        # 管理接口（结算触发）
+        - id: order-admin
+          uri: ${ORDER_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/admin/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+
+logging:
+  level:
+    org.springframework.cloud.gateway: INFO

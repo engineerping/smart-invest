@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <!--
+        fund-service —— 基金与持仓微服务
+        =============================================================================
+        职责：基金列表/详情/净值、用户持仓、投资组合模板、定投计划。
+        拥有表：funds 系列、holdings、user_portfolios、investment_plans
+        由原本的 fund + holding + plan + portfolio 四个模块合并而成，
+        因为它们在业务上强内聚（都围绕"基金资产"），拆分部署反而增加无谓的跨服务调用。
+        =============================================================================
+    -->
+
+    <parent>
+        <groupId>com.smartinvest</groupId>
+        <artifactId>smart-invest-parent</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>fund-service</artifactId>
+    <name>Smart Invest Fund Service</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.smartinvest</groupId>
+            <artifactId>common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <skip>false</skip>
+                    <mainClass>com.smartinvest.fund.FundServiceApplication</mainClass>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

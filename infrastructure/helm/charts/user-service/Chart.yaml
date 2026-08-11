@@ -1,0 +1,30 @@
+# =============================================================================
+# 📦 Chart.yaml —— user-service 子 Chart 的「身份证明」
+# =============================================================================
+#
+# 📖 一个典型的子 Chart 只有一个 Chart.yaml + 一个 values.yaml + templates/ 目录。
+#   和 umbrella 父 Chart 的区别:
+#     父 Chart: 有 dependencies (引用子 Chart), templates 只有公共资源
+#     子 Chart: 无 dependencies, templates 是本服务的部署资源
+#
+# 📖 说明:
+#   这也是 `helm create my-app` 命令生成的脚手架结构。
+#   工业界标准: 一个微服务 = 一个子 Chart, 放在 charts/ 目录下
+# =============================================================================
+
+apiVersion: v2                             # Helm 3 格式 (必须 v2)
+
+name: user-service                         # ← 子 Chart 名
+                                           #   父 Chart 的 dependencies 里 name 必须和这个值一致
+                                           #   否则 helm dependency update 报错「找不到依赖」
+
+description: Smart Invest 用户与认证微服务   # 文档字段, helm search 会显示
+
+type: application                          # application = 部署应用 (99% 的场景)
+
+version: 0.1.0                             # Chart 版本 (改模板/values 就升)
+                                           # 类比: Maven pom.xml 的 <version>
+
+appVersion: "1.0.0"                        # 应用版本 (镜像 tag)
+                                           # 类比: Docker 镜像的 tag
+                                           # 在 helm history 的 APP VERSION 列可见

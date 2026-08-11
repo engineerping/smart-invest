@@ -1,0 +1,133 @@
+# =============================================================================
+# CI/CD for K3S —— 代码推送即部署
+# =============================================================================
+# 面试核心亮点：这条流水线演示 DevOps 的"代码 → 制品 → 部署"全链路。
+#   push 到 main → 构建后端/前端 → 推 Docker Hub → SSH 连服务器 → helm upgrade
+# 需要配置的 GitHub Secrets：
+#   DOCKER_USERNAME    = gongchengship
+#   DOCKER_PASSWORD    = Docker Hub 密码
+#   ASUS_SERVER        = 192.168.31.192
+#   ASUS_SSH_PASSWORD  = George0  （或改用 SSH key）
+#
+# 注意：CD 默认只在手动触发（workflow_dispatch）运行，避免每次 push 都重部署。
+#       想全自动可取消 push 注释。
+# =============================================================================
+name: CD-K3S
+
+on:
+  workflow_dispatch:        # 手动触发：Actions → CD-K3S → Run workflow
+  # push:                   # 想全自动就取消这行注释
+  #   branches: [master]
+
+env:
+  REGISTRY: gongchengship   # Docker Hub 账号
+
+jobs:
+  build-and-deploy:
+    name: Build Images & Deploy to K3S
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ============ 1. 后端构建 ============
+      - name: Setup Java 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build backend jars
+        run: mvn -B -q -pl common,user-service,fund-service,order-service,notification-worker,api-gateway -am package -DskipTests --file backend/pom.xml
+
+      # ============ 2. 前端构建 ============
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      # ============ 3. 登录 Docker Hub ============
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      # ============ 4. 构建并推送镜像 ============
+      # 用多阶段 Dockerfile（每个服务目录下），与本地快速脚本互补
+      - name: Build & push backend images
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          for svc in user-service fund-service order-service notification-worker api-gateway; do
+            docker build -t ${REGISTRY}/smart-invest-${svc}:${IMAGE_TAG} \
+              -t ${REGISTRY}/smart-invest-${svc}:latest \
+              -f backend/${svc}/Dockerfile backend/
+            docker push ${REGISTRY}/smart-invest-${svc}:${IMAGE_TAG}
+            docker push ${REGISTRY}/smart-invest-${svc}:latest
+          done
+
+      - name: Build & push frontend image
+        run: |
+          IMAGE_TAG=${{ github.sha }}
+          docker build -t ${REGISTRY}/smart-invest-frontend:${IMAGE_TAG} \
+            -t ${REGISTRY}/smart-invest-frontend:latest \
+            -f frontend/Dockerfile frontend/
+          docker push ${REGISTRY}/smart-invest-frontend:${IMAGE_TAG}
+          docker push ${REGISTRY}/smart-invest-frontend:latest
+
+      # ============ 5. 部署到 K3S ============
+      - name: Deploy to K3S via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ASUS_SERVER }}
+          username: george
+          password: ${{ secrets.ASUS_SSH_PASSWORD }}
+          port: 22
+          script: |
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            # 下载 Helm charts（CI runner 打包后上传到服务器）
+            # 注：此处为简化演示，直接 clone 仓库到服务器再 helm install
+            sudo mkdir -p /opt/smart-invest && sudo chown $USER /opt/smart-invest
+            # 从 GitHub 拉取最新代码（含 charts）
+            cd /opt/smart-invest
+            if [ ! -d repo ]; then
+              git clone --depth 1 https://github.com/${{ github.repository }}.git repo
+            else
+              cd repo && git pull
+            fi
+            cd /opt/smart-invest/repo/infrastructure/helm-charts/umbrella
+            sudo helm dependency build .
+            sudo helm upgrade --install smart-invest . \
+              --namespace smart-invest --create-namespace \
+              --set user-service.image.tag=${{ github.sha }} \
+              --set fund-service.image.tag=${{ github.sha }} \
+              --set order-service.image.tag=${{ github.sha }} \
+              --set notification-worker.image.tag=${{ github.sha }} \
+              --set api-gateway.image.tag=${{ github.sha }} \
+              --set frontend.image.tag=${{ github.sha }} \
+              --wait --timeout 300s
+
+      # ============ 6. 健康检查 ============
+      - name: Verify deployment
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.ASUS_SERVER }}
+          username: george
+          password: ${{ secrets.ASUS_SSH_PASSWORD }}
+          port: 22
+          script: |
+            export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+            sudo kubectl -n smart-invest get pods
+            echo "--- rollout status ---"
+            for svc in user-service fund-service order-service notification-worker api-gateway frontend; do
+              sudo kubectl -n smart-invest rollout status deployment/${svc} --timeout=60s || echo "WARN: ${svc} not ready"
+            done

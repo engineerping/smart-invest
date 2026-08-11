@@ -1,0 +1,25 @@
+# =============================================================================
+# RabbitMQ Service —— 服务发现
+# =============================================================================
+# 其他服务通过 http://rabbitmq:5672 连接（K8S 服务发现）。
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "rabbitmq.fullname" . }}
+  labels:
+    app: rabbitmq
+spec:
+  type: ClusterIP
+  selector:
+    app: rabbitmq
+  ports:
+    - name: amqp
+      port: {{ .Values.service.amqpPort }}
+      targetPort: {{ .Values.service.amqpPort }}
+    - name: management
+      port: {{ .Values.service.managerPort }}
+      targetPort: {{ .Values.service.managerPort }}
+    # Prometheus 指标端口
+    - name: prometheus
+      port: 15692
+      targetPort: 15692

@@ -1,0 +1,127 @@
+# =============================================================================
+# 📋 values.yaml —— user-service 子 Chart 的「默认配置」
+# =============================================================================
+#
+# 📖 这个文件在整个 Helm 工作流中的角色:
+#   1. 提供所有可配置项的默认值
+#   2. 模板 (templates/*.yaml) 通过 {{ .Values.xxx }} 读取这些值
+#   3. 部署时可以被父 Chart (umbrella) 的 values 覆盖 (父 > 子)
+#   4. 部署时可以用 --set 命令行覆盖 (最高优先级)
+#
+# 📖 类比: Spring Boot 的 application.yml —— 定义默认配置,
+#   部署时用 application-prod.yml 覆盖, 或用环境变量覆盖。
+#
+# 📖 关键概念: 这个文件定义的所有 key, 在模板里都变成了「变量」。
+#   例: 这里写 replicaCount: 1,
+#       模板里写 {{ .Values.replicaCount }} → 渲染后变成 1
+#       命令行写 --set replicaCount=3 → 渲染后变成 3 (覆盖默认)
+# =============================================================================
+
+# ═════════════════════════════════════════════════════════════════════════════
+# replicaCount —— Pod 的副本数
+# ═════════════════════════════════════════════════════════════════════════════
+# K8S 会保证有这么多个 Pod 在运行, 少了就自动创建 (通过 ReplicaSet Controller)
+# 类比 Java: 线程池的 corePoolSize
+# 生产环境一般 ≥ 3 (保证高可用，分散到不同节点上)
+replicaCount: 1
+
+# ═════════════════════════════════════════════════════════════════════════════
+# image —— 容器镜像配置
+# ═════════════════════════════════════════════════════════════════════════════
+image:
+  repository: gongchengship/smart-invest-user-service    # Docker Hub 上的镜像名
+  tag: latest                                            # 默认拉最新 (生产应写具体版本如 v1.2.3)
+  pullPolicy: IfNotPresent                               # 镜像拉取策略
+  # pullPolicy 三种取值:
+  #   Always       → 每次启动都拉镜像 (tag 是 latest 时推荐)
+  #   IfNotPresent → 本地有就用, 没有才拉 (固定版本时推荐, 省网络)
+  #   Never        → 只用本地的, 不拉远程 (离线/K3S 手动导入时)
+
+# ═════════════════════════════════════════════════════════════════════════════
+# imagePullSecrets —— 私有镜像仓库的认证凭据
+# ═════════════════════════════════════════════════════════════════════════════
+# 如果镜像存在私有仓库 (如 Harbor/ACR/ECR), 需要先创建 K8S Secret 存 Docker 登录凭据,
+# 然后在这里引用 Secret 名。Docker Hub 公开仓库不需要。
+# 用 [] 表示空数组, 可填成这样:
+#   imagePullSecrets:
+#     - name: harbor-secret
+#     - name: acr-secret
+imagePullSecrets: []
+
+# ═════════════════════════════════════════════════════════════════════════════
+# nameOverride / fullnameOverride —— 控制资源名称
+# ═════════════════════════════════════════════════════════════════════════════
+# 这些值被 _helpers.tpl 里的 svc.name 和 svc.fullname 使用,
+# 影响最终生成的 Deployment/Service 的名字。
+# 留空 = 用 Helm 默认命名 (release名-chart名)
+# 填值 = 固定名称 (如 umbrella chart 里覆写为 user-service)
+nameOverride: ""
+fullnameOverride: ""
+
+# ═════════════════════════════════════════════════════════════════════════════
+# service —— K8S Service 配置
+# ═════════════════════════════════════════════════════════════════════════════
+service:
+  type: ClusterIP            # 服务类型 (最常见的内部服务类型)
+  # Service 四种 type:
+  #   ClusterIP    → 集群内部访问 (默认, 微服务间调用用这个)
+  #   NodePort     → 通过节点 IP:30000-32767 端口访问 (开发调试)
+  #   LoadBalancer → 云厂商分配公网负载均衡器 (生产对外暴露)
+  #   ExternalName → DNS 别名 (把外部服务映射进集群)
+  port: 8081                 # Service 自己的端口 + 容器端口 (K8S 网络转发)
+
+# ═════════════════════════════════════════════════════════════════════════════
+# resources —— 容器的 CPU/内存限制 (面试高频)
+# ═════════════════════════════════════════════════════════════════════════════
+resources:
+  requests:                  # 请求值 = 调度器的「保证」量
+    cpu: 100m                # Scheduler 根据 requests 决定 Pod 能放到哪台机器
+    memory: 512Mi            # 100m = 100 millicpu = 0.1 核 CPU
+  limits:                    # 上限值 = 容器的「硬顶」
+    cpu: "1"                 # 容器最多用 1 核 CPU (超过会被 throttling)
+    memory: 768Mi            # 容器最多用 768MB (超过 OOMKilled → Pod 被杀重启)
+  # 面试关键: requests 影响调度, limits 影响运行时。requests ≤ limits
+
+# ═════════════════════════════════════════════════════════════════════════════
+# 存活探针 / 就绪探针 (Liveness Probe / Readiness Probe)
+# ═════════════════════════════════════════════════════════════════════════════
+# kubelet 定期执行这些探测, 判断容器是否健康
+livenessProbe:
+  path: /actuator/health     # Spring Boot Actuator 健康检查端点
+  port: 8081
+  # initialDelaySeconds 在 deployment.yaml 里写死为 300 (等 Spring 启动完)
+  # periodSeconds 写死为 15 (每 15 秒检查一次)
+readinessProbe:
+  path: /actuator/health     # 通常和 liveness 用同一个端点
+  port: 8081
+  # 区别:
+  #   Readiness 失败 → 从 Service Endpoints 移除, 不接新流量 (Pod 还在)
+  #   Liveness 失败 → kubelet 杀掉容器重启 (自愈)
+
+# ═════════════════════════════════════════════════════════════════════════════
+# env —— 非敏感环境变量 (从 ConfigMap 注入)
+# ═════════════════════════════════════════════════════════════════════════════
+# 部署时通过 values 传入, Helm 用 range 循环渲染到 Deployment 的 env 字段。
+# 类比: application.yml 里的 spring.datasource.url
+env:
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/smartinvest"
+  SPRING_DATASOURCE_USERNAME: "smartadmin"
+  RABBITMQ_HOST: "rabbitmq"                              # ← 这是 K8S Service 的 DNS 名
+  RABBITMQ_PORT: "5672"
+  SPRING_RABBITMQ_PORT: "5672"
+
+# ═════════════════════════════════════════════════════════════════════════════
+# secretEnvRefs —— 敏感环境变量 (从 K8S Secret 注入)
+# ═════════════════════════════════════════════════════════════════════════════
+# 这里不写值, 只写 key 名。Helm 渲染时把每个 key 变成一个 secretKeyRef:
+#   - name: SPRING_DATASOURCE_PASSWORD
+#     valueFrom:
+#       secretKeyRef:
+#         name: smart-invest-secrets
+#         key: SPRING_DATASOURCE_PASSWORD
+# K8S 在 Pod 启动时从 Secret 读取这个 key 的值, 注入到环境变量。
+# 类比: Spring Cloud Config 的加密配置。
+secretEnvRefs:
+  - SPRING_DATASOURCE_PASSWORD
+  - JWT_SECRET
+

@@ -1,0 +1,184 @@
+# =============================================================================
+# 🚀 Deployment —— 用户服务的「部署清单」, 整个 Helm 模板体系中最核心的文件
+# =============================================================================
+#
+# 📖 这个模板在 Helm 工作流中的位置 (对照 §6.1 步骤 4):
+#   Helm 加载这个文件 → 用合并后的 Values 渲染模板语法 → 输出纯 K8S YAML → apply 到集群
+#
+# 📖 渲染过程示例 (以 user-service 为例):
+#   模板: name: {{ include "svc.fullname" . }}
+#   → Helm 调用 _helpers.tpl 的 svc.fullname → 检查 fullnameOverride 已设置
+#   → 渲染结果: name: user-service
+#
+#   模板: replicas: {{ .Values.replicaCount }}
+#   → Helm 读合并后的 values → 检查 umbrella 里设了 replicaCount: 1
+#   → 渲染结果: replicas: 1
+#
+#   模板: image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+#   → 渲染结果: image: "gongchengship/smart-invest-user-service:v1"
+#
+# 📖 类比: 这个 Deployment 模板 = Java 的泛型类
+#   {{ .Values.xxx }} 就是泛型参数, 不同的 values.yaml = 不同的类型实参
+#
+# 📖 7 个微服务共用同一套模板结构！user-service / fund-service / order-service 等
+#   的 deployment.yaml 完全一样, 只有 values.yaml 不同。
+#   这就是 Helm 的核心价值: 一套模板 + 多套 values = 多套部署
+# =============================================================================
+
+apiVersion: apps/v1                         # K8S Deployment 的 API 版本
+kind: Deployment                            # 资源类型: Deployment (管理无状态应用)
+
+metadata:
+  # ─── name: 调用 _helpers.tpl 的 svc.fullname ───
+  # 渲染结果: name: user-service (因为 umbrella chart 设了 fullnameOverride)
+  name: {{ include "svc.fullname" . }}
+
+  # ─── labels: 调用 _helpers.tpl 的 svc.labels ───
+  # nindent 4 = 给每行加 4 个空格缩进 (让 YAML 层级正确)
+  # 渲染结果:
+  #   labels:
+  #     app.kubernetes.io/name: user-service
+  #     app.kubernetes.io/instance: smart-invest
+  #     app.kubernetes.io/version: "1.0.0"
+  #     app.kubernetes.io/managed-by: Helm
+  labels:
+    {{- include "svc.labels" . | nindent 4 }}
+
+spec:
+  # ─── replicas：要维持几个 Pod 副本 ───
+  # .Values.replicaCount 来自 values.yaml (默认 1, 生产可以 --set 改)
+  # 关联: ReplicaSet Controller 持续检查「当前 Pod 数 == replicas？」,不等就纠正
+  replicas: {{ .Values.replicaCount }}
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # selector: Deployment 靠它知道「哪些 Pod 归我管」
+  # ═════════════════════════════════════════════════════════════════════════
+  #   matchLabels 必须等于 template.metadata.labels 里的值,
+  #   否则 Deployment 找不到自己的 Pod, 会无限创建 (常见错误！)
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "svc.name" . }}
+
+  # ═════════════════════════════════════════════════════════════════════════
+  # template: Pod 模板 (Template)
+  # ═════════════════════════════════════════════════════════════════════════
+  #   这里定义的是「Pod 长什么样」。
+  #   类比 Java: 泛型类, 每次创建新实例时参数化
+  template:
+    metadata:
+      # ⚠️ 这里的 labels 才会真正盖到 Pod 上！
+      #   不是 Deployment.metadata.labels, 是 template.metadata.labels
+      #   Service 的 selector 匹配的就是这里的 labels
+      labels:
+        {{- include "svc.labels" . | nindent 8 }}
+
+    spec:
+      # ═══════════════════════════════════════════════════════════════════
+      # imagePullSecrets: 私有镜像仓库的认证 (可选)
+      # ═══════════════════════════════════════════════════════════════════
+      # with 语句: 如果 .Values.imagePullSecrets 不为空 → 渲染里面内容
+      #           如果为空 → 什么都不输出 (类比 Java @Nullable 检查)
+      # toYaml . | nindent 8: 把值原样转成 YAML + 8 格缩进
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+
+      # ═══════════════════════════════════════════════════════════════════
+      # containers: 容器列表
+      # ═══════════════════════════════════════════════════════════════════
+      containers:
+        # ─── 容器名 = Chart 名 (即 user-service) ───
+        - name: {{ .Chart.Name }}
+
+          # ─── 镜像: "仓库:版本" ───
+          # 渲染结果: image: "gongchengship/smart-invest-user-service:v1"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+
+          # ─── 镜像拉取策略 ───
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+
+          # ─── 容器端口 ───
+          ports:
+            - containerPort: {{ .Values.service.port }}
+
+          # ═══════════════════════════════════════════════════════════════
+          # env: 环境变量注入 (两种来源)
+          # ═══════════════════════════════════════════════════════════════
+          env:
+            # ─── 非敏感环境变量: 直接写值 ───
+            # range $key, $value := .Values.env: 遍历 values.yaml 的 env 字典
+            # 每对 key-value 产生一组 name + value
+            # | quote: 给 value 加引号 (防止纯数字被 YAML 当整数解析)
+            # 渲染结果 (示例):
+            #   - name: SPRING_DATASOURCE_URL
+            #     value: "jdbc:postgresql://postgresql:5432/smartinvest"
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+
+            # ─── 敏感环境变量: 从 K8S Secret 读取 ───
+            # range .Values.secretEnvRefs: 遍历敏感 key 名列表
+            # 每个 key 生成一个 secretKeyRef, 运行时 K8S 从 Secret 里取出值
+            # 渲染结果 (示例):
+            #   - name: SPRING_DATASOURCE_PASSWORD
+            #     valueFrom:
+            #       secretKeyRef:
+            #         name: smart-invest-secrets
+            #         key: SPRING_DATASOURCE_PASSWORD
+            {{- range .Values.secretEnvRefs }}
+            - name: {{ . }}
+              valueFrom:
+                secretKeyRef:
+                  name: smart-invest-secrets
+                  key: {{ . }}
+            {{- end }}
+
+          # ═══════════════════════════════════════════════════════════════
+          # resources: 容器资源限制
+          # ═══════════════════════════════════════════════════════════════
+          # toYaml: 把 values.yaml 里的 resources 对象原样转成 YAML
+          # nindent 12: 每个字段缩进 12 格 (匹配 spec.containers[].resources 层级)
+          # 渲染结果:
+          #   resources:
+          #     requests:
+          #       cpu: 100m
+          #       memory: 512Mi
+          #     limits:
+          #       cpu: "1"
+          #       memory: 768Mi
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+
+          # ═══════════════════════════════════════════════════════════════
+          # readinessProbe: 就绪探针 → 告诉 K8S 「我准备好接流量了」
+          # ═══════════════════════════════════════════════════════════════
+          # httpGet: 向容器发 HTTP GET 请求
+          # path: /actuator/health  (Spring Boot Actuator 自带端点)
+          # 返回 200 → Ready; 否则 → 从 Service Endpoints 移除, 不接流量
+          # initialDelaySeconds: 30 → Spring Boot 启动需要时间, 等 30s 再开始探测
+          # periodSeconds: 10 → 每隔 10 秒测一次
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.path }}
+              port: {{ .Values.readinessProbe.port }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+          # ═══════════════════════════════════════════════════════════════
+          # livenessProbe: 存活探针 → 告诉 K8S 「我还活着」
+          # ═══════════════════════════════════════════════════════════════
+          # 探测失败 → kubelet 杀掉容器并重建 (自愈机制)
+          # initialDelaySeconds: 300 → Spring Boot 完全启动可能很慢,
+          #   给 5 分钟才第一次探测 (避免没启动完就被杀)
+          #   注意: Readiness 30s 就开始测, Liveness 要等 5 分钟
+          #   这是合理的: Readiness 是为了不接流量 (等几十秒就行),
+          #   Liveness 是为了重启 (不能太短, 否则会把正在启动的正常 Pod 杀掉)
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.path }}
+              port: {{ .Values.livenessProbe.port }}
+            initialDelaySeconds: 300
+            periodSeconds: 15
+

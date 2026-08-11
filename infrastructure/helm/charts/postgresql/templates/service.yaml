@@ -1,0 +1,67 @@
+# ==============================================================================
+# 🌐 Service —— PostgreSQL 的 K8S 服务定义
+# ==============================================================================
+#
+# PostgreSQL 需要两个 Service：
+#   1. Headless Service（用于 StatefulSet 网络标识）
+#   2. 普通 ClusterIP Service（其他微服务连接用）
+#
+# Headless Service (clusterIP: None) 的作用：
+#   - 不给 Service 分配虚拟 IP，DNS 查询直接返回 Pod IP
+#   - 每个 Pod 有独立的 DNS A 记录：<pod-name>.<service-name>.<ns>.svc.cluster.local
+#   - 例如：postgresql-0.postgresql-headless.smart-invest.svc.cluster.local
+#   - StatefulSet 的 spec.serviceName 必须指向这个 Headless Service
+#
+# 普通 ClusterIP Service 的作用：
+#   - 分配虚拟 IP（ClusterIP），DNS 查询返回这个 IP
+#   - 其他微服务通过 postgresql.smart-invest.svc.cluster.local:5432 连接
+#   - 自动负载均衡到 Ready 的 Pod
+# ==============================================================================
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Headless Service —— StatefulSet 要求的（给每个 Pod 独立 DNS）
+# ═══════════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: {{ include "postgresql.fullname" . }}-headless
+  labels:
+    {{- include "postgresql.labels" . | nindent 4 }}
+
+spec:
+  type: ClusterIP
+  clusterIP: None                       # ← None = Headless Service
+
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: postgresql
+      protocol: TCP
+      name: postgresql
+
+  selector:
+    {{- include "postgresql.selectorLabels" . | nindent 4 }}
+
+---
+# ═══════════════════════════════════════════════════════════════════════════
+# 普通 ClusterIP Service —— 其他微服务用这个 DNS 名连接
+# ═══════════════════════════════════════════════════════════════════════════
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: {{ include "postgresql.fullname" . }}
+  labels:
+    {{- include "postgresql.labels" . | nindent 4 }}
+
+spec:
+  type: ClusterIP
+
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: postgresql
+      protocol: TCP
+      name: postgresql
+
+  selector:
+    {{- include "postgresql.selectorLabels" . | nindent 4 }}

@@ -1,0 +1,54 @@
+# ==============================================================================
+# 📋 values-prod.yaml —— 生产环境覆盖配置
+# ==============================================================================
+# 使用方式：
+#   helm upgrade --install smart-invest ./umbrella/ \
+#     -f umbrella/values.yaml \          # Layer 2：默认配置
+#     -f umbrella/values-prod.yaml \     # Layer 3：生产环境覆盖（优先级更高）
+#     --namespace smart-invest \
+#     --atomic --timeout 600s
+#
+# 这个文件只写和默认 values.yaml 不同的值（DRY 原则）。
+# 所有生产环境特有的配置（更多副本数、更高资源限制等）写在这里。
+# ==============================================================================
+
+# ─── 覆盖全局镜像版本 ───
+global:
+  imageTag: "1.1.0"              # 生产环境使用的镜像版本（通常比默认的 1.0.0 新）
+  imagePullPolicy: IfNotPresent
+
+# ─── 生产环境副本数：至少 2 副本保证高可用 ───
+# K3S 单节点时 replicaCount > 1 不能防止节点故障，
+# 但能保证 Pod 级别的自动重启（某个 Pod 挂了，另一个还在服务）。
+user-service:
+  replicaCount: 2                # 生产至少 2 副本
+
+fund-service:
+  replicaCount: 2
+
+order-service:
+  replicaCount: 2
+
+notification-worker:
+  replicaCount: 2
+
+api-gateway:
+  replicaCount: 2
+
+frontend:
+  replicaCount: 2
+
+# ─── 生产环境资源限制（比子 Chart 默认值更大）───
+# 如果需要调整某个服务的资源，在这里覆盖。例如：
+# user-service:
+#   resources:
+#     requests:
+#       cpu: 200m
+#       memory: 512Mi
+#     limits:
+#       cpu: "1"
+#       memory: 1Gi
+
+# ─── 生产环境敏感配置（不要写在这里！用 --set 或外部 secrets 文件覆盖）───
+# secrets:
+#   dbPassword: ""  # 通过 --set secrets.dbPassword=$DB_PASSWORD 或 -f secrets.yaml 注入

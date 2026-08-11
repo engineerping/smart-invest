@@ -1,0 +1,76 @@
+# ==============================================================================
+# 🌐 Ingress —— K8S Ingress 模板（HTTP/HTTPS 路由规则）
+# ==============================================================================
+#
+# Ingress 是 K8S 的"反向代理/七层负载均衡器"，根据请求的 Host + Path
+# 把流量分发到不同的 Service。
+#
+# 工作流：
+#   外部请求 → Ingress Controller（如 Traefik/Nginx）→ 查看 Ingress Rules
+#   → 匹配 Host + Path → 路由到对应的 K8S Service → Service → Pod
+#
+# K3S 默认自带 Traefik Ingress Controller（开箱即用，不需要额外安装）。
+#
+# Ingress vs ServiceType LoadBalancer vs NodePort 的区别：
+#   Ingress:      一个入口代理多个 Service → 成本最低，最灵活
+#   LoadBalancer: 每个 Service 一个云负载均衡 → 成本高（每个 LB 独立计费）
+#   NodePort:     直接访问节点 IP:端口 → 简单但需要手动管理端口
+#
+# K3S 环境推荐用 Ingress（Traefik 自带）。
+# ==============================================================================
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+
+metadata:
+  # ─── Ingress 名称 ───
+  name: smart-invest-ingress
+
+  labels:
+    app.kubernetes.io/name: smart-invest
+    app.kubernetes.io/part-of: smart-invest
+    app.kubernetes.io/managed-by: Helm
+
+  annotations:
+    # ─── Ingress Class：指定哪个 Controller 处理这个 Ingress ───
+    # K3S 默认使用 Traefik，class name 是 traefik
+    kubernetes.io/ingress.class: traefik
+
+    # ─── Traefik 专用注解（可选）───
+    # 请求体大小限制（Spring Boot 默认 10MB，和这里一致）
+    traefik.ingress.kubernetes.io/router.middlewares: ""
+    # 如果你需要限流、重定向等中间件，在这里配置
+
+spec:
+  # ─── 路由规则 ───
+  rules:
+    # ─── 所有 Host（不限定域名）───
+    # 如果配置了域名，改为：
+    #   host: api.yourcompany.com
+    - http:
+        paths:
+          # ─── /api/* → API Gateway ───
+          # 所有 API 请求路由到 api-gateway Service 的 8080 端口。
+          # api-gateway（Spring Cloud Gateway）负责：
+          #   - JWT 认证
+          #   - 路由转发（/api/users → user-service:8081, /api/funds → fund-service:8082）
+          #   - 限流、日志
+          # Prefix 匹配：/api/users/login、/api/funds/123 都匹配
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway      # ← K8S Service 名称（fullnameOverride 的值）
+                port:
+                  number: 8080
+
+          # ─── / → 前端 SPA ───
+          # 非 /api 的请求路由到前端服务。
+          # 如果你的前端部署在 S3 + CloudFront（而不是 K8S 上），可以删掉这条。
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80
