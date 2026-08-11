@@ -190,38 +190,52 @@ terraform apply                # 执行变更
 
 ### 第四步：用 Helm 部署微服务 + 有状态中间件到 K3S
 
+> **详细部署过程见：** [deployment-guide.md](deployment-guide.md)（含 Docker 镜像构建、数据迁移、踩坑记录）
+
 ```bash
-# 构建所有服务的 Docker 镜像（在本地开发机）
-cd ../../..
-./scripts/build-images.sh
+# ========== A. 构建 Docker 镜像（Ubuntu x86_64 构建机）==========
+# 详见 deployment-guide.md 第三步，这里只列命令摘要
 
-# 推送镜像到 Docker Hub
-docker push gongchengship/smart-invest-user-service:1.0.0
-# ... 其他服务同理
+# 1. Mac：编译 jar + 前端
+cd backend && mvn -q -pl common,user-service,fund-service,order-service,notification-worker,api-gateway -am package -DskipTests
+cd frontend && npm run build
 
-# 在 EC2 上拉取镜像（或从快网机 crane pull → scp → ctr import）
-# 参考：k3s-image-import-workflow 文档
+# 2. Mac → Ubuntu：rsync 代码 + scp jar
+rsync -avz --exclude 'node_modules' --exclude 'target' --exclude 'dist' --exclude '.terraform' --exclude '.git' ~/coding/smart-invest/ george@192.168.31.192:~/coding/smart-invest/
+scp backend/*/target/*-1.0.0-SNAPSHOT.jar george@192.168.31.192:~/coding/smart-invest/backend/
 
-# ========== 数据迁移（如果 EC2 上已有 docker-compose 的 Postgres）==========
-# SSH 到 EC2，备份旧数据
-ssh ec2-user@<IP>
-docker exec smart-invest-db pg_dump -U smartadmin smartinvest | gzip > ~/db-backup.sql.gz
+# 3. Ubuntu：打镜像（x86_64 原生，不加 --platform 也行）
+for svc in user-service fund-service order-service notification-worker api-gateway; do
+  sudo docker build --platform linux/amd64 -t gongchengship/smart-invest-$svc:1.0.0 backend/$svc/
+done
+sudo docker build --platform linux/amd64 -t gongchengship/smart-invest-frontend:1.0.0 frontend/
+
+# 4. Ubuntu → EC2：docker save → scp → ctr import
+sudo docker save gongchengship/smart-invest-* -o /tmp/images.tar
+scp -i /tmp/smart-invest-ec2-keypair.pem /tmp/images.tar ec2-user@<EC2_IP>:/tmp/
+ssh ec2-user@<EC2_IP> "sudo k3s ctr image import /tmp/images.tar"
+
+# ========== B. 数据迁移（如果 EC2 上已有 docker-compose 的 Postgres）==========
+ssh ec2-user@<EC2_IP>
+sudo docker start smart-invest-postgres-1   # 启动旧 Postgres
+sudo docker exec smart-invest-postgres-1 pg_dump -U smartadmin smartinvest | gzip > /tmp/db-backup.sql.gz
+sudo docker stop smart-invest-postgres-1    # 备份完就停（释放 5432 端口）
 exit
 
-# 部署（含 PostgreSQL + RabbitMQ + 所有微服务）
+# ========== C. Helm 部署 ==========
 cd infrastructure/helm/umbrella
-helm dependency update   # 下载子 Chart 依赖（含 postgresql/redis）
+helm dependency update   # 下载子 Chart 依赖
 helm upgrade --install smart-invest . \
   --namespace smart-invest --create-namespace \
   --atomic --timeout 600s
 
-# 恢复数据库
-kubectl exec -i -n smart-invest postgresql-0 -- \
-  psql -U smartadmin smartinvest < ~/db-backup.sql.gz
+# ========== D. 恢复数据 ==========
+zcat /tmp/db-backup.sql.gz | kubectl exec -i -n smart-invest postgresql-0 -- \
+  psql -U smartadmin smartinvest
 
 # 验证
 kubectl get all -n smart-invest
-kubectl get pvc -n smart-invest    # 看 PVC 是否都 Bound
+kubectl get pvc -n smart-invest
 helm list -n smart-invest
 ```
 

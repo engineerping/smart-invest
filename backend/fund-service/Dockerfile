@@ -9,6 +9,8 @@ WORKDIR /build
 COPY pom.xml .
 COPY common/pom.xml common/pom.xml
 COPY fund-service/pom.xml fund-service/pom.xml
+# 为其他模块创建空外壳（父 POM 的 <modules> 需要）
+RUN mkdir -p user-service api-gateway order-service notification-worker
 RUN mvn -q -pl fund-service -am dependency:go-offline -B || true
 COPY common common
 COPY fund-service fund-service
