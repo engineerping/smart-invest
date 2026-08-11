@@ -93,39 +93,44 @@ dependencies:
 
   # ─── 自定义微服务（file:// 本地路径）───
   - name: user-service
-    version: 1.0.0
+    version: 0.1.0
     repository: "file://../charts/user-service"
 
   - name: fund-service
-    version: 1.0.0
+    version: 0.1.0
     repository: "file://../charts/fund-service"
 
   - name: order-service
-    version: 1.0.0
+    version: 0.1.0
     repository: "file://../charts/order-service"
 
   - name: notification-worker
-    version: 1.0.0
+    version: 0.1.0
     repository: "file://../charts/notification-worker"
 
   - name: api-gateway
-    version: 1.0.0
+    version: 0.1.0
     repository: "file://../charts/api-gateway"
 
   - name: frontend
-    version: 1.0.0
+    version: 0.1.0
     repository: "file://../charts/frontend"
 
   - name: rabbitmq
-    version: 1.0.0
+    version: 0.1.0
     repository: "file://../charts/rabbitmq"
+
+  # ─── 第三方中间件（https:// 远程仓库）───
+  # 使用方式：
+  #   1. helm repo add bitnami https://charts.bitnami.com/bitnami
+  #   2. helm dependency update
+  #   3. condition 控制是否安装（values 里 redis.enabled: true/false）
+  - name: redis
+    version: 21.0.0
+    repository: "https://charts.bitnami.com/bitnami"
+    condition: redis.enabled
 
   # ─── 有状态中间件（自带，不依赖 Bitnami）───
   - name: postgresql
     version: 1.0.0
     repository: "file://../charts/postgresql"
-
-  - name: redis
-    version: 1.0.0
-    repository: "file://../charts/redis"
-    condition: redis.enabled

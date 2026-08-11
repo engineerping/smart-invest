@@ -467,3 +467,133 @@ Spring Cloud Gateway 在 API Gateway 里通过 `http://user-service:8081` 调用
 | hostAliases | 需要（跨 Docker/K8S 网络） | 不需要（都在 K3S 内） |
 | 镜像来源 | Docker Hub pull | Ubuntu 构建 → scp → ctr import |
 | 网络 | 内网，拉 Docker Hub 受限 | 海外 EC2，可直接拉 |
+
+---
+
+## FAQ：Helm 远程仓库与本地 Chart
+
+> 记录日期：2026-08-11
+
+### Q1: Mac OS 会影响 Helm 工作吗？Helm 是把 Redis 拉到本地还是拉到 EC2？
+
+**Mac OS 不影响 Helm 功能。** Helm 是用 Go 写的单一二进制文件，Mac/Linux/Windows 上行为完全一致。
+
+关键要理解 **Helm 的两步操作发生在哪里**：
+
+```
+helm dependency update  →  在「执行命令的机器」上运行
+                           从 Bitnami 下载 redis-21.0.0.tgz 到本地 charts/ 目录
+
+helm install            →  在「执行命令的机器」上运行
+                           读取 Chart 模板 → 渲染 K8S YAML → 通过 kubectl API 发送给集群
+```
+
+**Helm 永远不会直接往 EC2 上"拉东西"。** 它的工作方式是：
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ 方案 A（Mac 上 helm dep update）                         │
+│                                                         │
+│ Mac  ──helm dep update──→  charts/redis-21.0.0.tgz     │
+│      ──rsync/scp───────→  整个 helm/ 目录同步到 EC2      │
+│ EC2  ──helm install────→  读取 Chart → apply 到 K3S     │
+│                                                         │
+│ ⚠ 问题：Mac 在华硕内网，helm dep update 拉不到 Bitnami    │
+│         （Bitnami Chart 走 OCI，底层是 registry-1.docker.io）│
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ 方案 B（EC2 上直接 helm dep update）✅ 推荐               │
+│                                                         │
+│ Mac  ──git push / scp──→  代码到 EC2                     │
+│ EC2  ──helm dep update─→  charts/redis-21.0.0.tgz      │
+│      ──helm install────→  读取 Chart → apply 到 K3S     │
+│                                                         │
+│ ✅ EC2 在 AWS 新加坡，直接拉 Bitnami，不受华硕网络限制     │
+└─────────────────────────────────────────────────────────┘
+```
+
+**结论：** Mac 系统本身没问题，但因为华硕网络受限，`helm dependency update` 应该在 EC2 上执行。和你的 Docker 镜像构建策略一样——**谁有网谁干活**。
+
+---
+
+### Q2: 自己写 Chart  vs 使用 Helm 仓库的 Chart，有什么区别？
+
+| 维度 | 自写 Chart | 远程仓库 Chart（如 Bitnami） |
+|------|-----------|---------------------------|
+| **模板** | 自己写 Deployment/Service/PVC 等 YAML | 社区/官方维护，久经验证 |
+| **参数** | 自己定义 values，想怎么写怎么写 | 参数丰富但固定（如 `architecture`, `auth`, `master.persistence`） |
+| **维护** | 你需要跟踪安全补丁、版本更新 | Bitnami 团队持续更新，`helm dep update` 就能拿到新版 |
+| **灵活性** | ⭐⭐⭐⭐⭐ 完全自由 | ⭐⭐⭐ 只能通过 values 配置，改不了模板 |
+| **可靠性** | 取决于你的 K8S 水平 | ⭐⭐⭐⭐⭐ 专家级配置，处理了大量边界情况 |
+| **学习曲线** | 高（需要理解 K8S 资源细节） | 低（配 values 即可） |
+| **版本升级** | 手动改模板 | 改 version 号 + 适配参数变化 |
+
+**什么时候自己写 Chart：**
+- 你自己的微服务（user-service、api-gateway 等）—— 必须自己写，因为是你自己的应用
+- 对中间件有非常特殊的需求，Bitnami Chart 不支持的
+- 想深入学习 K8S 资源编排
+
+**什么时候用远程仓库 Chart：**
+- 标准化中间件（Redis、MySQL、Kafka、Elasticsearch 等）
+- 不想花精力维护基础设施 Chart
+- 需要生产级最佳实践（反亲和性、健康检查、资源限制、安全上下文等）
+
+**Bitnami Redis Chart 有多专业？** 举个例子，它支持的配置项超过 200 个：
+```yaml
+redis:
+  architecture: standalone | replication    # 单节点 vs 主从复制
+  auth:
+    enabled: true
+    password: "xxx"
+  master:
+    persistence:
+      enabled: true
+      size: 2Gi
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 200m
+        memory: 512Mi
+    nodeSelector: {}          # 节点选择
+    podAntiAffinity: {}       # 反亲和性
+  replica:                    # 只读副本配置
+    replicaCount: 3
+  sentinel:                   # 哨兵模式（自动故障转移）
+    enabled: true
+```
+
+你自写的 Redis Chart 只有 2.5KB 的 values.yaml，Bitnami 的复杂度和成熟度远超你简单几行能覆盖的。
+
+---
+
+### Q3: 推荐把 RabbitMQ 也改成从 Helm 远程仓库获取吗？
+
+**暂时不推荐。保持现状。**
+
+理由：
+
+| 因素 | Redis | RabbitMQ |
+|------|-------|----------|
+| 当前状态 | `enabled: false`，从未启用 | ✅ 已正常运行 |
+| 自定义 Hook | 无 | `rabbitmq-ready-hook.yaml`（部署前检查） |
+| 迁移成本 | 零（本来就没用） | 需要适配参数、验证 Hook 兼容性 |
+| 迁移风险 | 无 | Hook 可能不兼容，需要测试 |
+| 业务依赖 | 无 | 订单服务、通知 Worker 依赖它 |
+
+**核心原则：It works, don't fix it.**
+
+RabbitMQ 是你系统里的核心消息中间件，order-service 和 notification-worker 都依赖它。切换意味着：
+1. Bitnami RabbitMQ Chart 的参数结构和你自写的不同（需要做参数映射）
+2. `rabbitmq-ready-hook.yaml` 是为自写 Chart 写的，可能需要重写
+3. Deployment → StatefulSet 的差异可能导致 PVC 重建、数据丢失
+4. 即便一切顺利，消息队列中断就是业务中断
+
+**什么时候值得切换到 Bitnami RabbitMQ：**
+- 当下一个重大升级时（如 RabbitMQ 4.0）
+- 当你需要 RabbitMQ 集群模式时
+- 当 PVC 管理、备份、监控等运维复杂度高到你自己不想维护时
+
+**结论：Redis 用 Bitnami（本来就没用，零风险），RabbitMQ 和 PostgreSQL 继续用自写 Chart（已稳定运行）。**

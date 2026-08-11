@@ -151,15 +151,20 @@ postgresql:
     enabled: true
     size: 5Gi                        # 5GB（学习环境足够，不够可扩容）
 
-# ─── redis：内存缓存（Deployment + PVC，可选）───
+# ─── redis：内存缓存（Bitnami Chart，可选）───
 # 替代 AWS ElastiCache。默认关闭（当前项目未使用 Redis 缓存）。
 # 需要时设为 enabled: true。
+# Bitnami Redis Chart 文档：https://github.com/bitnami/charts/tree/main/bitnami/redis
 redis:
   enabled: false                     # 暂不需要 Redis，设为 true 即可开启
-  fullnameOverride: redis
-  persistence:
+  architecture: standalone           # 单节点（学习环境，生产可用 replication）
+  auth:
     enabled: true
-    size: 2Gi
+    password: "smartredis"           # Redis 密码
+  master:
+    persistence:
+      enabled: true
+      size: 2Gi
 
 # ═════════════════════════════════════════════════════════════════════════════
 # Helm Install / Upgrade 建议参数

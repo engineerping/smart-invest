@@ -38,7 +38,7 @@ metadata:
     # 告诉 Helm："这个资源不是普通的 K8S 资源，是 Hook"
     # pre-install：helm install 时执行
     # pre-upgrade：helm upgrade 时也执行
-    "helm.sh/hook": pre-install,pre-upgrade
+    "helm.sh/hook": post-install,post-upgrade
 
     # ─── "helm.sh/hook-weight": "5" ───
     # Hook 执行顺序（数字越小越先执行）。
@@ -55,7 +55,7 @@ metadata:
 spec:
   # ─── backoffLimit: 重试次数 ───
   # 3 次重试如果都失败 → Hook 失败 → helm install 失败
-  backoffLimit: 3
+  backoffLimit: 5
 
   template:
     metadata:

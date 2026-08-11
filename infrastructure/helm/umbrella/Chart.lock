@@ -1,0 +1,30 @@
+dependencies:
+- name: user-service
+  repository: file://../charts/user-service
+  version: 0.1.0
+- name: fund-service
+  repository: file://../charts/fund-service
+  version: 0.1.0
+- name: order-service
+  repository: file://../charts/order-service
+  version: 0.1.0
+- name: notification-worker
+  repository: file://../charts/notification-worker
+  version: 0.1.0
+- name: api-gateway
+  repository: file://../charts/api-gateway
+  version: 0.1.0
+- name: frontend
+  repository: file://../charts/frontend
+  version: 0.1.0
+- name: rabbitmq
+  repository: file://../charts/rabbitmq
+  version: 0.1.0
+- name: redis
+  repository: https://charts.bitnami.com/bitnami
+  version: 21.0.0
+- name: postgresql
+  repository: file://../charts/postgresql
+  version: 1.0.0
+digest: sha256:c69906f9f2d5ff5a2833599b9c7ca89b5cbeb5696a3c94da177133bdf9189b99
+generated: "2026-08-11T18:57:41.178623+08:00"
