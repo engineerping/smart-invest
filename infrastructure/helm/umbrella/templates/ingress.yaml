@@ -32,16 +32,16 @@ metadata:
     app.kubernetes.io/managed-by: Helm
 
   annotations:
-    # ─── Ingress Class：指定哪个 Controller 处理这个 Ingress ───
-    # K3S 默认使用 Traefik，class name 是 traefik
-    kubernetes.io/ingress.class: traefik
-
     # ─── Traefik 专用注解（可选）───
     # 请求体大小限制（Spring Boot 默认 10MB，和这里一致）
     traefik.ingress.kubernetes.io/router.middlewares: ""
     # 如果你需要限流、重定向等中间件，在这里配置
 
 spec:
+  # ─── Ingress Class：指定哪个 Controller 处理这个 Ingress ───
+  # K3S 默认使用 Traefik，class name 是 traefik
+  # 用 ingressClassName 替代已废弃的 kubernetes.io/ingress.class 注解
+  ingressClassName: traefik
   # ─── 路由规则 ───
   rules:
     # ─── 所有 Host（不限定域名）───
