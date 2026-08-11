@@ -121,6 +121,10 @@ resource "aws_instance" "k3s_server" {
   # EC2 启动后 AWS 会自动分配一个公网 IP（重启会变，见下面的 EIP）
   associate_public_ip_address = true
 
+  # ─── user_data_replace_on_change：防止 user_data 变更触发实例重建 ───
+  # 设为 false 表示 user_data 变化时只更新不重建，避免意外销毁实例丢失数据。
+  user_data_replace_on_change = false
+
   # ══════════════════════════════════════════════════════════════════════
   # 系统盘（Root Block Device）配置
   # ══════════════════════════════════════════════════════════════════════

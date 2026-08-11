@@ -50,7 +50,7 @@
 # ==============================================================================
 resource "aws_iam_role" "ec2_role" {
   name = "${var.project_name}-ec2-role"
-
+  description = "Allows EC2 instances to call AWS services on your behalf."
   # ─── 信任策略：谁可以扮演这个角色 ───
   # 格式是 AWS IAM Policy JSON（和 Terraform 无关的 AWS 标准格式）。
   # jsonencode() 是 Terraform 函数，把 HCL object 转成 JSON 字符串。
@@ -86,24 +86,26 @@ resource "aws_iam_role" "ec2_role" {
 #   - 托管策略是推荐做法。
 # ==============================================================================
 
-# ─── CloudWatch Agent 权限 ───
-# 允许 EC2 把系统指标（CPU、内存、磁盘）和自定义日志发送到 CloudWatch。
-# CloudWatchServerFullAccess = 对 CloudWatch 的完全访问（读写）。
-resource "aws_iam_role_policy_attachment" "cloudwatch" {
+# ─── SES（Simple Email Service）权限 ───
+# 允许 EC2 上的应用通过 SES 发送邮件（如用户注册验证、通知邮件）。
+resource "aws_iam_role_policy_attachment" "ses" {
   role       = aws_iam_role.ec2_role.name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
-  # ARN = Amazon Resource Name，AWS 中每个资源的全局唯一标识符。
-  # 格式：arn:aws:iam::<账号ID>:policy/<策略名>
-  # aws:policy/ 前缀表示这是 AWS 官方托管策略。
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSESFullAccess"
 }
 
-# ─── AWS Systems Manager (SSM) 权限 ───
-# 允许通过 SSM Session Manager 登录 EC2（不用 SSH，更安全）。
-# 好处：不需要开放 22 端口，不需要管理 SSH 密钥，
-#       所有操作有审计日志（谁什么时候登录做了什么）。
-resource "aws_iam_role_policy_attachment" "ssm" {
+# ─── ECR（Elastic Container Registry）权限 ───
+# 允许 EC2 从 ECR 拉取 Docker 镜像（K3s 部署 Spring Boot 服务所需）。
+resource "aws_iam_role_policy_attachment" "ecr" {
   role       = aws_iam_role.ec2_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryFullAccess"
+}
+
+# ─── Secrets Manager 权限 ───
+# 允许 EC2 上的应用读取/写入密钥（如数据库密码、API Key），
+# 避免在代码或环境变量中硬编码敏感信息。
+resource "aws_iam_role_policy_attachment" "secrets" {
+  role       = aws_iam_role.ec2_role.name
+  policy_arn = "arn:aws:iam::aws:policy/SecretsManagerReadWrite"
 }
 
 # ==============================================================================

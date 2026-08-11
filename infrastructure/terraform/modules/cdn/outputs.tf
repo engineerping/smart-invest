@@ -24,5 +24,5 @@ output "s3_bucket_arn" {
 
 output "waf_web_acl_arn" {
   description = "WAF Web ACL 的 ARN（用于 CloudWatch 告警等）"
-  value       = aws_wafv2_web_acl.cloudfront_waf.arn
+  value       = data.aws_wafv2_web_acl.cloudfront_waf.arn
 }

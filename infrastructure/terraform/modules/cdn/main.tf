@@ -50,14 +50,6 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
   restrict_public_buckets = true
 }
 
-# ─── 版本控制 ───
-resource "aws_s3_bucket_versioning" "frontend" {
-  bucket = aws_s3_bucket.frontend.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
 # ─── S3 存储桶策略 ───
 resource "aws_s3_bucket_policy" "frontend" {
   bucket     = aws_s3_bucket.frontend.id
@@ -102,26 +94,26 @@ resource "aws_cloudfront_distribution" "main" {
   enabled         = true
   is_ipv6_enabled = true
   http_version    = "http2"
-  web_acl_id      = aws_wafv2_web_acl.cloudfront_waf.arn
+  web_acl_id      = data.aws_wafv2_web_acl.cloudfront_waf.arn
   comment         = ""
 
   # ─── Origin 1：S3（前端静态资源）───
   origin {
     domain_name              = aws_s3_bucket.frontend.bucket_regional_domain_name
-    origin_id                = "${var.s3_bucket_name}.s3.${var.aws_region}.amazonaws.com-mnroxtmimfk"
+    origin_id                = "smart-invest-frontend-service-prod-bucket-name.s3.ap-southeast-1.amazonaws.com-mnroxtmimfk"
     origin_access_control_id = aws_cloudfront_origin_access_control.s3_oac.id
   }
 
   # ─── Origin 2：EC2（后端 API）───
   origin {
-    domain_name = var.ec2_public_dns
+    domain_name = "ec2-46-137-250-243.ap-southeast-1.compute.amazonaws.com"
     origin_id   = "smart-invest-ec2-backend"
 
     custom_origin_config {
       http_port                = 8080
       https_port               = 443
       origin_protocol_policy   = "http-only"
-      origin_ssl_protocols     = ["TLSv1.2"]
+      origin_ssl_protocols = ["SSLv3", "TLSv1", "TLSv1.1", "TLSv1.2"]
       origin_read_timeout      = 30
       origin_keepalive_timeout = 5
     }
@@ -129,18 +121,14 @@ resource "aws_cloudfront_distribution" "main" {
 
   # ─── 默认缓存行为：S3 前端（匹配所有非 /api/* 的请求）───
   default_cache_behavior {
-    target_origin_id       = "${var.s3_bucket_name}.s3.${var.aws_region}.amazonaws.com-mnroxtmimfk"
+    target_origin_id       = "smart-invest-frontend-service-prod-bucket-name.s3.ap-southeast-1.amazonaws.com-mnroxtmimfk"
     viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["GET", "HEAD"]
     cached_methods         = ["GET", "HEAD"]
     compress               = true
 
-    forwarded_values {
-      query_string = false
-      cookies {
-        forward = "none"
-      }
-    }
+    # ✅ 使用 cache_policy_id 替代 forwarded_values（两者互斥，与实际 CloudFront 配置一致）
+    cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"  # CachingOptimized
 
     min_ttl     = 0
     default_ttl = 3600
@@ -151,18 +139,14 @@ resource "aws_cloudfront_distribution" "main" {
   ordered_cache_behavior {
     path_pattern           = "/api/*"
     target_origin_id       = "smart-invest-ec2-backend"
-    viewer_protocol_policy = "https-only"
+    viewer_protocol_policy = "redirect-to-https"
     allowed_methods        = ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
     cached_methods         = ["GET", "HEAD"]
     compress               = true
 
-    forwarded_values {
-      query_string = true
-      headers      = ["Authorization", "Content-Type"]
-      cookies {
-        forward = "all"
-      }
-    }
+    # ✅ 使用 cache_policy_id + origin_request_policy_id 替代 forwarded_values（与实际 CloudFront 配置一致）
+    cache_policy_id          = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad"  # CachingDisabled
+    origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3"  # AllViewer
 
     min_ttl     = 0
     default_ttl = 0
@@ -203,98 +187,14 @@ resource "aws_cloudfront_distribution" "main" {
 }
 
 # ==============================================================================
-# WAF Web ACL —— Web 应用防火墙
+# WAF Web ACL —— Web 应用防火墙（只读引用）
 # ==============================================================================
-resource "aws_wafv2_web_acl" "cloudfront_waf" {
+# WAF 由 CloudFront 自动创建，使用 data source 只读引用，不由 Terraform 管理。
+# 这样 Terraform 不会尝试创建/修改/销毁这个 WAF，避免破坏 CloudFront 的配置。
+# ==============================================================================
+data "aws_wafv2_web_acl" "cloudfront_waf" {
   provider = aws.us_east_1
 
-  name        = "CreatedByCloudFront-398257e2"
-  scope       = "CLOUDFRONT"
-  description = "WAF for ${var.project_name} CloudFront distribution"
-
-  # ─── 默认动作：不匹配任何规则 → 放行 ───
-  default_action {
-    allow {}
-  }
-
-  # ─── 规则 1：Amazon IP 声誉列表 ───
-  rule {
-    name     = "AWSManagedRulesAmazonIpReputationList"
-    priority = 0
-
-    override_action {
-      none {}
-    }
-
-    statement {
-      managed_rule_group_statement {
-        name        = "AWSManagedRulesAmazonIpReputationList"
-        vendor_name = "AWS"
-      }
-    }
-
-    visibility_config {
-      cloudwatch_metrics_enabled = true
-      metric_name                = "AWSManagedRulesAmazonIpReputationList"
-      sampled_requests_enabled   = true
-    }
-  }
-
-  # ─── 规则 2：通用规则集（OWASP Top 10 防护）───
-  rule {
-    name     = "AWSManagedRulesCommonRuleSet"
-    priority = 1
-
-    override_action {
-      none {}
-    }
-
-    statement {
-      managed_rule_group_statement {
-        name        = "AWSManagedRulesCommonRuleSet"
-        vendor_name = "AWS"
-      }
-    }
-
-    visibility_config {
-      cloudwatch_metrics_enabled = true
-      metric_name                = "AWSManagedRulesCommonRuleSet"
-      sampled_requests_enabled   = true
-    }
-  }
-
-  # ─── 规则 3：已知恶意输入规则集 ───
-  rule {
-    name     = "AWSManagedRulesKnownBadInputsRuleSet"
-    priority = 2
-
-    override_action {
-      none {}
-    }
-
-    statement {
-      managed_rule_group_statement {
-        name        = "AWSManagedRulesKnownBadInputsRuleSet"
-        vendor_name = "AWS"
-      }
-    }
-
-    visibility_config {
-      cloudwatch_metrics_enabled = true
-      metric_name                = "AWSManagedRulesKnownBadInputsRuleSet"
-      sampled_requests_enabled   = true
-    }
-  }
-
-  # ─── 全局可见性配置 ───
-  visibility_config {
-    cloudwatch_metrics_enabled = true
-    metric_name                = "${var.project_name}-waf"
-    sampled_requests_enabled   = true
-  }
-
-  tags = {
-    Name    = "${var.project_name}-waf"
-    Project = var.project_name
-  }
+  name  = "CreatedByCloudFront-398257e2"
+  scope = "CLOUDFRONT"
 }

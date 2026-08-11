@@ -96,10 +96,21 @@ if aws('iam', 'get-role', '--role-name', rn, '--query', 'Role.RoleName', '--outp
         print(f'  {GREEN}✓ Instance Profile 存在{NC}')
         imp(f'module.iam.aws_iam_instance_profile.ec2_profile', rn)
     else: print(f'  {YELLOW}⚠ Instance Profile 不存在，跳过{NC}'); skip += 1
-    att = aws('iam', 'list-attached-role-policies', '--role-name', rn, '--query', "AttachedPolicies[*].PolicyArn", '--output', 'text')
-    for pol, label in [('CloudWatchAgentServerPolicy', 'cloudwatch'), ('AmazonSSMManagedInstanceCore', 'ssm')]:
-        if pol in att: imp(f'module.iam.aws_iam_role_policy_attachment.{label}', f'{rn}/arn:aws:iam::aws:policy/{pol}')
-        else: print(f'  {YELLOW}⚠ {pol} 未绑定，跳过{NC}'); skip += 1
+    # ✅ 修正：import 实际绑定的 3 个策略（SES / ECR / SecretsManager）
+    #    原来的 CloudWatchAgentServerPolicy / AmazonSSMManagedInstanceCore 实际未绑定，已删除
+    att = aws('iam', 'list-attached-role-policies', '--role-name', rn,
+              '--query', 'AttachedPolicies[*].PolicyArn', '--output', 'text')
+
+    for pol, label in [
+        ('AmazonSESFullAccess',                    'ses'),
+        ('AmazonEC2ContainerRegistryFullAccess',    'ecr'),
+        ('SecretsManagerReadWrite',                 'secrets'),
+    ]:
+        if pol in att:
+            imp(f'module.iam.aws_iam_role_policy_attachment.{label}',
+                f'{rn}/arn:aws:iam::aws:policy/{pol}')
+        else:
+            print(f'  {YELLOW}⚠ {pol} 未绑定，跳过{NC}'); skip += 1
 else: print(f'  {YELLOW}⚠ IAM 角色不存在，跳过{NC}'); skip += 1
 
 # ═══ Phase 2: SG + EC2 + EIP ═══
@@ -123,18 +134,20 @@ print(f'{GREEN}✓ EIP: {eip} ({aws("ec2", "describe-addresses", "--region", aws
 imp(f'module.compute.aws_eip.k3s', eip)
 
 # ═══ Phase 3: CDN ═══
-print(f'\n{CYAN}━━━ [Phase 3/4] CDN (WAF + S3 + OAC + CloudFront) ━━━{NC}')
-
-waf = aws('wafv2', 'list-web-acls', '--scope', 'CLOUDFRONT', '--region', 'us-east-1', '--query', f"WebACLs[?Name=='{pn}-waf'].Id | [0]", '--output', 'text')
-if not waf or waf == 'None': waf = aws('wafv2', 'list-web-acls', '--scope', 'CLOUDFRONT', '--region', 'us-east-1', '--query', "WebACLs[0].Id", '--output', 'text')
-if waf and waf != 'None': print(f'{GREEN}✓ WAF: {waf}{NC}'); imp(f'module.cdn.aws_wafv2_web_acl.cloudfront_waf', waf)
-else: print(f'{YELLOW}⚠ 无 WAF{NC}'); skip += 1
+print(f'\n{CYAN}━━━ [Phase 3/4] CDN (S3 + OAC + CloudFront) ━━━{NC}')
+# ✅ 修正：WAF 已改为 data source，无需 import，直接跳过
+print(f'  {CYAN}ℹ WAF 为 data source（由 CloudFront 自动创建），跳过 import{NC}')
+skip += 1
 
 bkt = aws('s3api', 'list-buckets', '--query', f"Buckets[?starts_with(Name, '{pn}')].Name | [0]", '--output', 'text')
 if not bkt or bkt == 'None': print(f'{RED}✗ 未找到 S3{NC}'); sys.exit(1)
 print(f'{GREEN}✓ S3: {bkt}{NC}'); imp(f'module.cdn.aws_s3_bucket.frontend', bkt)
 imp_opt(f'module.cdn.aws_s3_bucket_public_access_block.frontend', bkt)
 imp_opt(f'module.cdn.aws_s3_bucket_policy.frontend', bkt)
+
+# ✅ 修正：S3 versioning 实际未开启，对应 resource 已从 .tf 删除，跳过 import
+print(f'  {CYAN}ℹ S3 versioning 未开启，跳过 import{NC}')
+skip += 1
 
 oac = aws('cloudfront', 'list-origin-access-controls', '--query', "OriginAccessControlList.Items[0].Id", '--output', 'text')
 if oac and oac != 'None': print(f'{GREEN}✓ OAC: {oac}{NC}'); imp_opt(f'module.cdn.aws_cloudfront_origin_access_control.s3_oac', oac)
