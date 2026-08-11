@@ -102,7 +102,7 @@ public class OrderController {
 
 这段代码里，**只有 3 行业务逻辑**，但注解和配置占了 10 行。而且每个微服务都要重复写这些 `@HystrixCommand`、`@LoadBalanced`、超时配置、重试策略…
 
-**Service Mesh 的思路是**：把这些 `@HystrixCommand`、`@LoadBalanced`、超时、重试、熔断——全部从应用代码里拿掉，交给 Pod 里的一个 Sidecar 代理（Envoy）去做。你的代码回到最初的样子：
+**Service Mesh 的思路是**：把这些 `@HystrixCommand`、`@LoadBalanced`、超时、重试、熔断——全部从应用代码里拿掉，交给 Pod 里的一个 Sidecar 代理（Envoy<'安沃伊>）去做。你的代码回到最初的样子：
 
 ```java
 // Istio 接管之后——业务代码只写业务逻辑
