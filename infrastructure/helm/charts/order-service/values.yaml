@@ -31,7 +31,7 @@ readinessProbe:
 
 env:
 
-  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-host:5432/smartinvest"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/smartinvest"
   SPRING_DATASOURCE_USERNAME: "smartadmin"
   RABBITMQ_HOST: "rabbitmq"
   RABBITMQ_PORT: "5672"

@@ -14,11 +14,6 @@ spec:
       labels:
         {{- include "svc.labels" . | nindent 8 }}
     spec:
-      # 把 postgres-host 映射到宿主机 IP（K3S 里访问宿主机 Docker 的 Postgres）
-      hostAliases:
-        - ip: "192.168.31.192"
-          hostnames:
-            - "postgres-host"
       containers:
         - name: {{ .Chart.Name }}
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

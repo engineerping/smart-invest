@@ -85,17 +85,6 @@ spec:
       {{- end }}
 
       # ═══════════════════════════════════════════════════════════════════
-      # hostAliases: 自定义 /etc/hosts 映射
-      # ═══════════════════════════════════════════════════════════════════
-      # K3S 环境特殊配置: Postgres 跑在宿主机 Docker 里,
-      # Pod 内无法直接访问宿主机 IP → 用 hostAliases 映射 postgres-host → 宿主机 IP
-      # 生产环境如果有 RDS/云数据库, 就不需要这个
-      hostAliases:
-        - ip: "192.168.31.192"
-          hostnames:
-            - "postgres-host"
-
-      # ═══════════════════════════════════════════════════════════════════
       # containers: 容器列表
       # ═══════════════════════════════════════════════════════════════════
       containers:
@@ -123,7 +112,7 @@ spec:
             # | quote: 给 value 加引号 (防止纯数字被 YAML 当整数解析)
             # 渲染结果 (示例):
             #   - name: SPRING_DATASOURCE_URL
-            #     value: "jdbc:postgresql://postgres-host:5432/smartinvest"
+            #     value: "jdbc:postgresql://postgresql:5432/smartinvest"
             {{- range $key, $value := .Values.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}

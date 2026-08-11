@@ -104,7 +104,7 @@ readinessProbe:
 # 部署时通过 values 传入, Helm 用 range 循环渲染到 Deployment 的 env 字段。
 # 类比: application.yml 里的 spring.datasource.url
 env:
-  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres-host:5432/smartinvest"
+  SPRING_DATASOURCE_URL: "jdbc:postgresql://postgresql:5432/smartinvest"
   SPRING_DATASOURCE_USERNAME: "smartadmin"
   RABBITMQ_HOST: "rabbitmq"                              # ← 这是 K8S Service 的 DNS 名
   RABBITMQ_PORT: "5672"
