@@ -110,7 +110,7 @@ resource "aws_cloudfront_distribution" "main" {
     origin_id   = "smart-invest-ec2-backend"
 
     custom_origin_config {
-      http_port                = 8080
+      http_port                = 80  # ✅ 从单体应用时的 8080 改为 80，对应 K3S Traefik 端口
       https_port               = 443
       origin_protocol_policy   = "http-only"
       origin_ssl_protocols = ["SSLv3", "TLSv1", "TLSv1.1", "TLSv1.2"]
