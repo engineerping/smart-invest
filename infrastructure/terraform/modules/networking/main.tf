@@ -111,11 +111,11 @@ resource "aws_security_group" "smart_invest" {
   description = "Smart Invest backend security group "
   vpc_id      = data.aws_vpc.default.id
 
-  # ─── 规则 1：应用端口 8080（CloudFront 回源）───
+  # ─── 规则 1：HTTP 80 端口（浏览器 + Traefik Ingress）───
   ingress {
-    description = "the request from cloudFront"
-    from_port   = 8080
-    to_port     = 8080
+    description = "HTTP access for web frontend"
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
