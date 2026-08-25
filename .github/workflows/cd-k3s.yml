@@ -7,7 +7,7 @@
 #   DOCKER_USERNAME    = gongchengship
 #   DOCKER_PASSWORD    = Docker Hub 密码
 #   ASUS_SERVER        = 192.168.31.192
-#   ASUS_SSH_PASSWORD  = George0  （或改用 SSH key）
+#   ASUS_SSH_PASSWORD  = ASUS 服务器 SSH 密码  （或改用 SSH key）
 #
 # 注意：CD 默认只在手动触发（workflow_dispatch）运行，避免每次 push 都重部署。
 #       想全自动可取消 push 注释。
