@@ -14,8 +14,7 @@ Ensure the following software is installed before starting:
 | Maven | 3.9+ | Backend build tool |
 | Node.js | 20+ | Frontend runtime |
 | npm | 10+ | Package manager (bundled with Node.js) |
-| Docker | Latest | Runs local PostgreSQL database |
-| Python | 3.10+ | Optional, for supplementary data scripts |
+| Docker | Latest | Runs local PostgreSQL and RabbitMQ |
 
 **Verify installations:**
 ```bash
@@ -29,12 +28,18 @@ docker --version # Should show latest version
 
 ## 2. Start PostgreSQL Database
 
-Smart Invest uses PostgreSQL 16 as its database. For local development, start it via Docker.
+Smart Invest uses PostgreSQL 16 as its database. For local development, start it via Docker (no `docker-compose.yml` needed).
 
 ### Start the database
 ```bash
-cd /path/to/smart-invest   # Project root
-docker compose up -d postgres
+docker run -d --name smart-invest-db \
+  --restart unless-stopped \
+  -p 5432:5432 \
+  -e POSTGRES_DB=smartinvest \
+  -e POSTGRES_USER=smartadmin \
+  -e POSTGRES_PASSWORD=localdev_only \
+  -v postgres_data:/var/lib/postgresql/data \
+  postgres:16-alpine
 ```
 
 This will:
@@ -43,7 +48,7 @@ This will:
 - Map container port 5432 to localhost:5432
 - Create the `smartinvest` database
 
-**Connection details (configured in `docker-compose.yml`):**
+**Connection details:**
 | Setting | Value |
 |---------|-------|
 | Host | localhost |
@@ -60,39 +65,53 @@ docker ps
 
 ### Stop the database
 ```bash
-docker compose down
+docker stop smart-invest-db
 ```
-> Note: `down` stops and removes the container but does NOT delete persistent data (stored in Docker Volumes).
+> Note: `stop` stops the container but does NOT delete persistent data (stored in the `postgres_data` volume). To delete all data, run `docker rm -v smart-invest-db`.
 
 ---
 
 ## 3. Build and Start the Backend
 
+The backend is a multi-module Maven project made up of 6 microservices: `common`, `user-service`, `fund-service`, `order-service`, `notification-worker`, and `api-gateway`.
+
 ### 3.1 Initial Build (required on first run)
 
-Smart Invest uses a multi-module Maven structure. Sub-modules must be installed to the local Maven repository before the main `app` module can resolve them.
-
 ```bash
-#### Option 3.1.1: single line command
-cd backend && mvn install -DskipTests && cd app && mvn spring-boot:run -Dspring-boot.run.profiles=local 2>&1 | tail -40;
-
-#### Or
-#### Option 3.1.2: step-by-step command
 cd backend
 mvn install -DskipTests
 ```
 
-### 3.2 Start the backend
+This compiles and installs all 6 modules (including the shared `common` module) into your local Maven repository so each service can resolve its dependencies.
+
+### 3.2 Start the services
+
+Run each service in its own terminal. The entry point is `api-gateway` on port 8080.
+
 ```bash
 cd backend
-SPRING_PROFILES_ACTIVE=local JWT_SECRET=SmartInvestSecretKey2024ForJWTTokenSigning mvn spring-boot:run -pl app
+
+# user-service — owns the database; Flyway runs automatically on startup (21 migrations)
+mvn spring-boot:run -pl user-service
+
+# fund-service
+mvn spring-boot:run -pl fund-service
+
+# order-service
+mvn spring-boot:run -pl order-service
+
+# notification-worker (consumes RabbitMQ messages)
+mvn spring-boot:run -pl notification-worker
+
+# api-gateway — entry point (http://localhost:8080)
+mvn spring-boot:run -pl api-gateway
 ```
 
-**Startup arguments explained:**
-- `SPRING_PROFILES_ACTIVE=local` — Activates `application-local.yml`, which contains local database connection settings
-- `JWT_SECRET=...` — JWT signing secret. Required — the app will fail to start without it
-- `-pl app` — Runs only the `app` module
+**Notes:**
+- `-pl <service>` — Runs only the named Maven module
 - `mvn spring-boot:run` — Preferred over `java -jar` in development because it skips packaging, supports hot reload, and automatically includes unpackaged resources
+- Set `SPRING_PROFILES_ACTIVE=local` (and `JWT_SECRET`) as environment variables when a service's `application-local.yml` requires them
+- `order-service` → `notification-worker` messaging needs RabbitMQ (see below)
 
 ### 3.3 Verify backend started successfully
 
@@ -102,7 +121,7 @@ Wait 20~40 seconds. When you see this in the logs, startup is complete:
 Started SmartInvestApplication in X.XXX seconds
 ```
 
-You can also hit the health endpoint:
+You can also hit the health endpoint through the gateway:
 ```bash
 curl http://localhost:8080/actuator/health
 # Should return {"status":"UP"}
@@ -110,20 +129,23 @@ curl http://localhost:8080/actuator/health
 
 ### 3.4 Seed data — auto-loaded by Flyway
 
-**No manual script execution is needed!** When Spring Boot starts, Flyway automatically:
-1. Scans the SQL migration files in `backend/app/src/main/resources/db/migration/`
-2. Executes all unapplied migrations in order (currently 17 total)
+**No manual script execution is needed!** When `user-service` starts, Flyway automatically:
+1. Scans the SQL migration files in `backend/user-service/src/main/resources/db/migration/`
+2. Executes all unapplied migrations in order (currently 21 total: V1–V21)
 3. Loads all seed data (funds, NAV history, demo user, holdings, etc.)
 
 **Current migration files:**
 | Migration | Description |
 |-----------|-------------|
-| V1~V12 | Schema definitions |
-| V13 | 11 seed funds |
-| V14 | Demo user (demo@smartinvest.com) + initial holdings |
-| V15 | Backfill current NAV for all funds |
-| V16 | Full NAV history (~329 trading days × 11 funds) |
-| V17 | Fund asset/sector/geo allocations + top 10 holdings |
+| V1~V13 | Schema definitions |
+| V14 | 11 seed funds |
+| V15 | Demo user (demo@smartinvest.com) + demo data |
+| V16 | Seed NAV + demo data |
+| V17 | Full NAV history (~329 trading days × 11 funds) |
+| V18 | Fund asset/sector/geo allocations + top 10 holdings |
+| V19 | Demo orders |
+| V20 | Demo plans |
+| V21 | Notifications table |
 
 ### 3.5 Stop the backend
 ```bash
@@ -132,15 +154,29 @@ kill $(lsof -ti :8080) && echo "Backend server stopped"
 
 ---
 
-## 4. Start the Frontend
+## 4. Start RabbitMQ (optional, for order → notification flow)
 
-### 4.1 Install dependencies
+`order-service` publishes events to RabbitMQ, and `notification-worker` consumes them. If you are not testing those flows, you can skip this step.
+
+```bash
+docker run -d --name smart-invest-rabbitmq \
+  -p 5672:5672 -p 15672:15672 \
+  rabbitmq:3.13-management-alpine
+```
+
+Management UI: http://localhost:15672 (guest/guest).
+
+---
+
+## 5. Start the Frontend
+
+### 5.1 Install dependencies
 ```bash
 cd frontend
 npm install
 ```
 
-### 4.2 Start the dev server
+### 5.2 Start the dev server
 ```bash
 npm run dev
 ```
@@ -152,16 +188,16 @@ VITE v8.0.3  ready in XXX ms
 ➜  Network: http://192.168.x.x:5173/
 ```
 
-### 4.3 Stop the frontend
+### 5.3 Stop the frontend
 ```bash
 lsof -ti:5173 | xargs kill
 ```
 
 ---
 
-## 5. Verify Seed Data
+## 6. Verify Seed Data
 
-### 5.1 Browser verification
+### 6.1 Browser verification
 
 1. Open browser to: http://localhost:5173
 2. Log in with demo credentials:
@@ -174,12 +210,12 @@ After login you should see:
 - **Fund List** — 11 funds with current NAVs
 - **My Investment Plans** — One active monthly recurring plan
 
-### 5.2 API verification (optional)
+### 6.2 API verification (optional)
 
 With the backend running, open a new terminal:
 
 ```bash
-# Verify fund list with NAV
+# Verify fund list with NAV (routed through api-gateway)
 curl http://localhost:8080/api/funds
 
 # Verify demo user portfolio summary (requires JWT token — see below)
@@ -196,25 +232,20 @@ curl -X POST http://localhost:8080/api/auth/login \
 
 ---
 
-## 6. Supplementary Scripts
+## 7. Build & Deployment Scripts
 
-The `scripts/` directory in the project root contains additional utilities:
+The `scripts/` directory in the project root contains utilities for image building and K3S deployment (not needed for local development):
 
-### Create demo user (usually not needed manually)
-```bash
-./scripts/create-demo-user.sh
-```
-> This script recreates the demo user account. Not needed if V14 migration ran successfully — seed data is already present.
+- `build-images.sh` / `build-amd64.sh` — build Docker images on the x86_64 build machine
+- `deploy-k3s.sh` — deploy to the K3S cluster
+- `setup-db.sh` — prepare PostgreSQL on the build machine
+- `deploy-rabbitmq.sh`, `deploy-monitoring.sh`, `k3s-dashboard-token.sh`, `cloudwatch-setup.sh`
 
-### Seed additional NAV history (optional)
-```bash
-./scripts/seed-nav-history.py
-```
-> This script populates a longer span (5 years) of NAV history for chart display. Current V16 already includes data from 2025-01-02 to 2026-04-07 (~329 trading days), which is sufficient for most use cases.
+See `infrastructure/deployment-guide.md` for the full deployment workflow.
 
 ---
 
-## 7. Troubleshooting
+## 8. Troubleshooting
 
 ### Q1: `JWT_SECRET` placeholder error on startup
 ```
@@ -222,7 +253,7 @@ Could not resolve placeholder 'JWT_SECRET' in value "${JWT_SECRET}"
 ```
 **Fix:** Make sure the environment variable is set in the startup command:
 ```bash
-JWT_SECRET=SmartInvestSecretKey2024ForJWTTokenSigning mvn spring-boot:run -pl app
+JWT_SECRET=SmartInvestSecretKey2024ForJWTTokenSigning mvn spring-boot:run -pl user-service
 ```
 
 ### Q2: Database connection error
@@ -245,9 +276,8 @@ Migration VXX__xxx.sql failed
    ```
 3. To reset the database completely:
    ```bash
-   docker compose down -v   # -v removes all data volumes
-   docker compose up -d postgres
-   # Restart backend — Flyway will re-run all migrations from scratch
+   docker rm -v smart-invest-db   # removes the container and its data volume
+   # Restart the DB, then restart user-service — Flyway will re-run all migrations from scratch
    ```
 
 ### Q4: Frontend page is blank or shows "No routes matched"
@@ -263,79 +293,77 @@ Migration VXX__xxx.sql failed
 
 ### Q5: Port already in use
 ```bash
-# Port 8080 (backend)
+# Port 8080 (api-gateway)
 kill $(lsof -ti :8080)
 
 # Port 5173 (frontend)
 kill $(lsof -ti :5173)
 
 # Port 5432 (database)
-docker compose stop postgres
+docker stop smart-invest-db
 ```
 
 ---
 
-## 8. Quick Start — All-in-One Commands
+## 9. Quick Start — All-in-One Commands
 
 Run these in sequence to get everything running:
 
 ```bash
 # 1. Start database
-cd /path/to/smart-invest
-docker compose up -d postgres
+docker run -d --name smart-invest-db \
+  --restart unless-stopped -p 5432:5432 \
+  -e POSTGRES_DB=smartinvest -e POSTGRES_USER=smartadmin \
+  -e POSTGRES_PASSWORD=localdev_only \
+  -v postgres_data:/var/lib/postgresql/data \
+  postgres:16-alpine
 
-# 2. Wait 5 seconds
-sleep 5
-
-# 3. Build backend (first time only)
+# 2. Build backend (first time only)
 cd backend
 mvn install -DskipTests
 
-# 4. Start backend
-SPRING_PROFILES_ACTIVE=local JWT_SECRET=SmartInvestSecretKey2024ForJWTTokenSigning mvn spring-boot:run -pl app &
-BACKEND_PID=$!
+# 3. Start services (each in its own terminal window)
+mvn spring-boot:run -pl user-service      # runs Flyway migrations
+mvn spring-boot:run -pl fund-service
+mvn spring-boot:run -pl order-service
+mvn spring-boot:run -pl notification-worker
+mvn spring-boot:run -pl api-gateway       # entry point http://localhost:8080
 
-# 5. Wait for backend to start (~30 seconds)
-sleep 30
-
-# 6. Start frontend (in a new terminal window)
+# 4. Start frontend (in a new terminal window)
 cd frontend && npm install && npm run dev
 
-# 7. Open http://localhost:5173
+# 5. Open http://localhost:5173
 # Login: demo@smartinvest.com / Demo1234!
 
 # —— To stop ——
-# Backend: kill $BACKEND_PID
+# Services: Ctrl+C in each terminal
 # Frontend: lsof -ti:5173 | xargs kill
-# Database: docker compose down
+# Database: docker stop smart-invest-db
 ```
 
 ---
 
-## 9. Project Structure Overview
+## 10. Project Structure Overview
 
 ```
 smart-invest/
 ├── backend/                  # Spring Boot backend (multi-module Maven)
-│   ├── app/                 # Main application module
-│   │   └── src/main/resources/
-│   │       ├── application-local.yml   # Local configuration
-│   │       └── db/migration/           # Flyway migrations (V1~V17)
-│   ├── module-user/         # User authentication module
-│   ├── module-fund/         # Fund data module
-│   ├── module-order/        # Order module
-│   ├── module-portfolio/    # Portfolio module
-│   ├── module-plan/         # Investment plan module
-│   ├── module-scheduler/    # Scheduled jobs module
-│   └── module-notification/ # Notification module
+│   ├── common/              # Shared library
+│   ├── user-service/        # Auth + users + risk; Flyway migrations (V1~V21)
+│   ├── fund-service/        # Fund data
+│   ├── order-service/       # Orders
+│   ├── notification-worker/ # RabbitMQ consumer
+│   └── api-gateway/         # Spring Cloud Gateway (entry point)
 ├── frontend/                # React frontend
 │   └── src/
 │       ├── pages/           # Page components
 │       ├── components/     # Shared components
 │       ├── api/             # API client
 │       └── types/           # TypeScript type definitions
+├── infrastructure/          # Terraform IaC + Helm charts
+│   ├── terraform/           # VPC, EC2, S3, CloudFront, WAF
+│   └── helm/                # umbrella chart + sub-charts
 ├── docs/                    # Documentation
-│   └── local_development_environment_setup.md  # This document
-├── scripts/                 # Utility scripts
-└── docker-compose.yml       # Docker database configuration
+├── scripts/                 # Build & deployment scripts
+└── .github/workflows/       # CI/CD (cd-k3s.yml)
 ```

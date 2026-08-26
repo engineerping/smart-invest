@@ -1,11 +1,11 @@
 # Smart Invest
 
-A production-grade mobile investment platform built on AWS, Spring Boot, and React.
+A production-grade mobile investment platform built with Spring Boot microservices and React, deployed on AWS with **Terraform (IaC) + Kubernetes (K3S) + Helm**.
 
 ## Live Demo
 
-**Frontend:** https://your-cloudfront-distribution.cloudfront.net
-**API:** https://api.yourdomain.com (or EC2 IP)
+- **Frontend (CloudFront):** `https://d2hoqnqufe8qq0.cloudfront.net` (see `infrastructure/terraform/live/prod/outputs.tf`)
+- **API:** same distribution, `/api/*` → api-gateway
 
 ## Features
 
@@ -18,22 +18,35 @@ A production-grade mobile investment platform built on AWS, Spring Boot, and Rea
 
 ## Tech Stack
 
-| Layer          | Technology                                  |
-| -------------- | ------------------------------------------- |
-| Frontend       | React 18 + TypeScript + Vite + Tailwind CSS |
-| Backend        | Java 21 + Spring Boot 3.3 + JPA/Hibernate   |
-| Database       | PostgreSQL 16 (RDS db.t3.micro)             |
-| Infrastructure | Terraform 1.9 + AWS EC2 + S3 + CloudFront   |
-| CI/CD          | GitHub Actions                              |
-| Monitoring     | Amazon CloudWatch                           |
+| Layer          | Technology                                                        |
+| -------------- | ----------------------------------------------------------------- |
+| Frontend       | React 18 + TypeScript + Vite + Tailwind CSS                       |
+| Backend        | Java 21 + Spring Boot 3.3 microservices + Spring Cloud Gateway    |
+| Database       | PostgreSQL 16 (K3S StatefulSet + PVC)                             |
+| Message Queue  | RabbitMQ (K3S Deployment + PVC)                                   |
+| Cache          | Redis (K3S Deployment + PVC, default disabled)                    |
+| Orchestration  | Kubernetes (K3S single node) + Helm umbrella chart                |
+| Infrastructure | Terraform + AWS EC2 (t3.medium) + S3 + CloudFront + WAF           |
+| CI/CD          | GitHub Actions (`cd-k3s.yml`, manual `workflow_dispatch`)         |
+| Monitoring     | Amazon CloudWatch                                                 |
 
 ## Architecture
 
 ```
-Internet → CloudFront (S3 SPA) / HTTPS → EC2 (Spring Boot :8080) → RDS PostgreSQL
+Internet → CloudFront (S3 SPA) + WAF
+              │ /api/*
+              ▼
+        EC2 (t3.medium) ── K3S single node ── Traefik Ingress
+              │
+              ├── api-gateway         (Spring Cloud Gateway, :8080)
+              ├── user-service        (:8081, owns Flyway migrations)
+              ├── fund-service        (:8082)
+              ├── order-service       (:8083)
+              ├── notification-worker (:8084, RabbitMQ consumer)
+              └── postgresql / rabbitmq / redis (in-cluster, PVC-backed)
 ```
 
-See `docs/superpowers/plans/` for the full implementation plan.
+The full deployment record is in `infrastructure/deployment-guide.md` and `infrastructure/README.md`.
 
 ## Getting Started
 
@@ -41,128 +54,103 @@ See `docs/superpowers/plans/` for the full implementation plan.
 
 - Java 21, Maven 3.9+
 - Node.js 20, npm
-- Docker (for local PostgreSQL)
-- AWS CLI configured
+- Docker (for local PostgreSQL / RabbitMQ)
 
-### run locally
+### Run locally
 
 ```bash
 # === PostgreSQL (Docker) ===
-docker compose up -d postgres;      # Start
-docker compose down;                # Stop
-docker compose down -v;             # Stop and delete volumes and remove network
+docker run -d --name smart-invest-db \
+  --restart unless-stopped -p 5432:5432 \
+  -e POSTGRES_DB=smartinvest -e POSTGRES_USER=smartadmin \
+  -e POSTGRES_PASSWORD=localdev_only \
+  -v postgres_data:/var/lib/postgresql/data \
+  postgres:16-alpine
 
-# === Backend ===
-# Start: (http://localhost:8080)
-cd backend && mvn install -DskipTests && cd app && mvn spring-boot:run -Dspring-boot.run.profiles=local 2>&1 | tail -40;
+# === RabbitMQ (order → notification flow) ===
+docker run -d --name smart-invest-rabbitmq \
+  -p 5672:5672 -p 15672:15672 rabbitmq:3.13-management-alpine
 
-# Note: `mvn install` is needed first because the multi-module project requires sub-modules (domain, infrastructure, etc.)
-# to be installed into the local Maven repo before `app` can resolve them. `spring-boot:run` is preferred over
-# `java -jar` in dev because it skips packaging, supports hot reload, and includes unpackaged resources automatically.
+# === Backend (6 Maven modules) ===
+# Build all modules first, then start each service (entry point is api-gateway :8080)
+cd backend && mvn install -DskipTests
+mvn spring-boot:run -pl user-service
+mvn spring-boot:run -pl fund-service
+mvn spring-boot:run -pl order-service
+mvn spring-boot:run -pl notification-worker
+mvn spring-boot:run -pl api-gateway
 
-# === Populate data into DB ===
-## When starting Spring Boot — Flyway will automatically detect and execute the SQL file in backend/app/src/main/resources/db.
-
-# Stop: kill the Maven process， or Ctrl+C
-kill $(lsof -ti :8080) && echo "Backend server stopped"
+# Note: Flyway runs automatically when user-service starts
+# (21 migrations in backend/user-service/src/main/resources/db/migration/).
 
 # === Frontend ===
-cd frontend; npm run dev;              # Start (http://localhost:5173)
-lsof -ti:5173 | xargs kill;            # Stop
+cd frontend && npm run dev;   # http://localhost:5173
 
 # === Use ===
-# 1. Login with demo account 
+# 1. Login with demo account
 demo@smartinvest.com
 password:Demo1234!
 ```
 
-### Deploy to AWS
+### Deploy to AWS (IaC + K8S + Helm)
 
 ```bash
-cd infrastructure;
-terraform init;
-terraform apply -var="admin_cidr=$(curl -s ifconfig.me)/32" \
-                -var="key_pair_name=your-key-pair" \
-                -var="account_id=$(aws sts get-caller-identity --query Account --output text)";
+# 1. Terraform provisions EC2 + S3 + CloudFront + WAF (see infrastructure/deployment-guide.md)
+cd infrastructure/terraform/live/prod
+cp terraform.tfvars.example terraform.tfvars   # fill in your AWS values
+terraform init && terraform apply
 
-# Deploy
-./scripts/deploy.sh;
+# 2. Build images (Mac → Ubuntu x86_64 build machine → k3s ctr import)
+#    Full flow: infrastructure/deployment-guide.md
 
-# 3. Verify
-curl https://<ec2-ip>/actuator/health;
+# 3. Helm deploy all services
+cd infrastructure/helm/umbrella
+helm dependency update
+helm upgrade --install smart-invest . --namespace smart-invest --create-namespace \
+  --atomic --timeout 600s
 
-# 4. GitHub Secrets needed:
-AWS_ACCESS_KEY_ID, 
-AWS_SECRET_ACCESS_KEY, 
-EC2_INSTANCE_ID, 
-ARTIFACT_BUCKET, 
-FRONTEND_BUCKET, 
-CF_DISTRIBUTION_ID, 
-API_BASE_URL
+# 4. GitHub Actions secrets for cd-k3s.yml (manual workflow_dispatch):
+DOCKER_USERNAME, DOCKER_PASSWORD, ASUS_SERVER, ASUS_SSH_PASSWORD
 ```
-
-# Variable Descriptions
-
-| Variable              | Description                                                   |
-| --------------------- | ------------------------------------------------------------- |
-| AWS_ACCESS_KEY_ID     | AWS API access key ID                                         |
-| AWS_SECRET_ACCESS_KEY | AWS API access key                                            |
-| EC2_INSTANCE_ID       | Your EC2 instance ID for SSH deployment of JAR files          |
-| ARTIFACT_BUCKET       | Name of the S3 bucket storing backend JAR files               |
-| FRONTEND_BUCKET       | Name of the S3 bucket storing frontend build artifacts        |
-| CF_DISTRIBUTION_ID    | CloudFront distribution ID for cache refresh after deployment |
-| API_BASE_URL          | Backend API address used by frontend calls                    |
 
 ## Repository Structure
 
 ```
-backend/           Spring Boot application (modular monolith)
+backend/           Spring Boot microservices (common + 5 services + api-gateway)
 frontend/          React TypeScript SPA
-infrastructure/    Terraform IaC (VPC, EC2, RDS, S3, CloudFront)
-.github/workflows/ CI/CD pipelines
-scripts/           Deployment and utility scripts
+infrastructure/    Terraform IaC (VPC, EC2, S3, CloudFront, WAF) + Helm charts
+.github/workflows/ CI/CD (cd-k3s.yml)
+scripts/           Build and deployment scripts (build-images, deploy-k3s, setup-db, ...)
 ```
 
-# What Was Built
+## What Was Built
 
-## Backend (48 Java files)
+### Backend (6 Maven modules)
 
-| Module              | Description                                                                                                                              |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| module-user         | JWT auth (RS256), registration/login, BCrypt passwords, 6-question risk questionnaire with 5-level scoring                               |
-| module-fund         | Fund catalogue API with filtering, NAV history (3M–5Y), asset allocation, multi-asset endpoint                                           |
-| module-order        | Order placement, T+2 settlement date calculator (skips weekends), order reference generation (P-XXXXXX / timestamp format), cancellation |
-| module-portfolio    | Holdings query API                                                                                                                       |
-| module-plan         | Monthly investment plan CRUD + termination                                                                                               |
-| module-scheduler    | @Scheduled cron — daily 01:00 HKT plan execution, weekday 15:00 NAV simulation                                                           |
-| module-notification | SES email stub (logs in dev)                                                                                                             |
-| app                 | Flyway 13 migrations, 11 seed funds, JWT config, AWS config profiles                                                                     |
+| Module               | Description                                                                                     |
+| -------------------- | ----------------------------------------------------------------------------------------------- |
+| `common`             | Shared library — JWT utils, DTOs, common exceptions/config                                       |
+| `user-service`       | User management, JWT auth (RS256), risk assessment; owns the database (21 Flyway migrations V1–V21) |
+| `fund-service`       | Fund catalogue, NAV history, asset/geo/sector allocation, holdings                               |
+| `order-service`      | Order placement, T+2 settlement date, order reference generation (P-XXXXXX), cancellation       |
+| `notification-worker`| RabbitMQ consumer, email notifications (SES stub in dev)                                        |
+| `api-gateway`        | Spring Cloud Gateway — entry point on :8080, routes `/api/*` to the services above              |
 
-## Frontend (16 TypeScript files)
+### Frontend (React + TypeScript)
 
 - Auth: Login, Register pages
-- Home: SmartInvestHomePage with fund category cards
-- Funds: FundListPage (filter by type), FundDetailPage with NavChart + RiskGauge
+- Home: fund category cards
+- Funds: list (filter by type), detail with NavChart + RiskGauge
 - Order: 4-step flow — Setup → Review → Terms → Success
 - Holdings: MyHoldingsPage, MyTransactionsPage
 - Components: PageLayout, RiskGauge, NavChart
 
-## Infrastructure (19 Terraform files)
+### Infrastructure (Terraform + Helm)
 
-- VPC (public/private subnets, security groups)
-- IAM (EC2 role with SecretsManager, SES, CloudWatch policies)
-- EC2 (t3.small, systemd service, Nginx reverse proxy, user_data.sh)
-- RDS (PostgreSQL 16 db.t3.micro, automated backups)
-- S3+CloudFront (OAC, SPA 404 fallback, CloudFront cert)
+- Terraform modules: networking (VPC/subnets/SG), compute (EC2 t3.medium), iam, cdn (S3 + CloudFront + WAF)
+- Helm: 9 sub-charts (5 microservices + frontend + postgresql + rabbitmq + redis) + umbrella chart
+- K3S single-node cluster on EC2 (ap-southeast-1), Traefik ingress, local-path-provisioner
 
-## CI/CD
+### CI/CD
 
-- `.github/workflows/ci.yml` — Maven + npm + Terraform validate on PR
-- `.github/workflows/cd.yml` — JAR upload → SSM deploy, frontend sync → CloudFront invalidation
-
-## Scripts
-
-- `scripts/deploy.sh` — full deploy pipeline
-- `scripts/seed-nav-history.py` — populate 5 years of NAV data
-- `scripts/create-demo-user.sh` — demo account + order
-- `scripts/cloudwatch-setup.sh` — CPU and RDS storage alarms
+- `.github/workflows/cd-k3s.yml` — manual `workflow_dispatch`: build jars + frontend, push Docker images, SSH to build machine, `helm upgrade --install smart-invest`

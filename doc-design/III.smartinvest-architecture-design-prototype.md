@@ -8,6 +8,11 @@
 
 ---
 
+> **⚠️ 说明：本文档描述的是「原型阶段」（模块化单体 + 单 EC2 + Docker Compose）的历史设计。**
+>
+> 项目后续已升级为 **微服务 + K3S + Helm** 的 IaC 部署架构。
+> 当前实际架构请以 `infrastructure/README.md` 和 `infrastructure/deployment-guide.md` 为准。
+
 ## 一、C4 架构模型（C4 Models）
 
 C4 模型由 Simon Brown 提出，通过四个层次的图来描述系统：**上下文（Context）**、**容器（Container）**、**组件（Component）**、**代码（Code）**。每一层服务于不同的受众，逐层深入，从"系统是什么"到"代码怎么写"。

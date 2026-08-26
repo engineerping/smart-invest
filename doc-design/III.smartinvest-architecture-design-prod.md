@@ -9,6 +9,11 @@
 
 ---
 
+> **⚠️ 说明：本文档是架构设计 / 学习文档（SAP-C02 备考），描述的是「目标企业级 AWS 架构」，并非 Smart Invest 的实际部署。**
+>
+> 实际部署是 **单台 EC2 + K3S + Helm** 的自托管架构（微服务 + 集群内 PostgreSQL/RabbitMQ/Redis，不使用 EKS/Aurora/ElastiCache）。
+> 请以 `infrastructure/README.md` 和 `infrastructure/deployment-guide.md` 为准。
+
 ## 一、C4 架构模型（C4 Models）
 
 ---

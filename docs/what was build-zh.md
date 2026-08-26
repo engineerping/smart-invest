@@ -4,71 +4,73 @@
 
 ## 一、项目概览
 
-Smart Invest 是一个投资平台，基于 **Java 21 + Spring Boot 3.3** 后端和 **React 18 + TypeScript + Vite** 前端构建。出于将成本控制在200$ 以内的考虑，项目原型服务端采用多模块 Maven 的单体架构，实际开发时会升级成 micro-service 架构，通过 Flyway 管理数据库迁移，前端使用 Tailwind CSS 设计移动端 UI，采用 JWT（RS256）实现身份认证。
+Smart Invest 是一个投资平台，基于 **Java 21 + Spring Boot 3.3** 后端和 **React 18 + TypeScript + Vite** 前端构建。后端已从多模块 Maven 的单体架构升级为 micro-service 架构，通过 **Terraform (IaC) + Kubernetes (K3S) + Helm** 部署在 AWS 上。通过 Flyway 管理数据库迁移，前端使用 Tailwind CSS 设计移动端 UI，采用 JWT（RS256）实现身份认证。
 
 **技术栈：**
 
-- 后端：Java 21, Spring Boot 3.3, JPA/Hibernate, PostgreSQL 16, Flyway, JWT (RS256)
+- 后端：Java 21, Spring Boot 3.3 微服务, Spring Cloud Gateway, JPA/Hibernate, Flyway, JWT (RS256)
 - 前端：React 18, TypeScript, Vite, Tailwind CSS, React Router 6, TanStack Query
-- 数据库：PostgreSQL 16 (Docker)
+- 数据库：PostgreSQL 16（K3S StatefulSet + PVC）
+- 消息队列：RabbitMQ · 缓存：Redis
+- 编排：Kubernetes (K3S) + Helm · IaC：Terraform
 - 认证：JWT RS256 非对称签名
 
 ---
 
 ## 二、后端模块结构
 
-项目包含 8 个 Maven 模块：
+项目包含 6 个 Maven 模块：
 
-| 模块                    | 说明                     |
-| --------------------- | ---------------------- |
-| `module-user`         | 用户管理、认证、风险评估           |
-| `module-fund`         | 基金数据、NAV 历史、持仓信息       |
-| `module-order`        | 订单管理（T+2 结算）           |
-| `module-portfolio`    | 用户持仓组合计算               |
-| `module-plan`         | 定期投资计划                 |
-| `module-scheduler`    | 定时任务（月度定投执行）           |
-| `module-notification` | 通知服务                   |
-| `app`                 | Spring Boot 主应用，聚合所有模块 |
+| 模块                     | 说明                         |
+| ---------------------- | -------------------------- |
+| `common`               | 共享库（JWT 工具、DTO、公共配置）      |
+| `user-service`         | 用户管理、认证、风险评估；负责数据库迁移      |
+| `fund-service`         | 基金数据、NAV 历史、资产配置、持仓       |
+| `order-service`        | 订单管理（T+2 结算）              |
+| `notification-worker`  | RabbitMQ 消费者，邮件通知            |
+| `api-gateway`          | Spring Cloud Gateway，入口 :8080 |
 
 ---
 
-## 三、数据库架构（17 个 Flyway 迁移）
+## 三、数据库架构（21 个 Flyway 迁移，V1–V21）
 
-### 用户与认证
+所有迁移文件位于 `backend/user-service/src/main/resources/db/migration/`（user-service 负责数据库）。
 
-- `V1` — 用户表 (`users`)，支持手机号/邮箱注册，密码加盐哈希存储
-- `V2` — 风险评估表 (`risk_assessments`)，存储用户的风险承受等级
+### 表结构（V1–V13）
 
-### 基金核心
+- `V1` — `users` 用户表
+- `V2` — `risk_assessments` 风险评估表
+- `V3` — `funds` 基金主表
+- `V4` — `fund_nav_history` 基金净值历史表
+- `V5` — `fund_asset_allocations` 资产配置表
+- `V6` — `fund_top_holdings` 前 10 大持仓表
+- `V7` — `fund_geo_allocations` 地理配置表
+- `V8` — `fund_sector_allocations` 行业配置表
+- `V9` — `reference_asset_mix` 参考资产配置表
+- `V10` — `user_portfolios` 用户组合表
+- `V11` — `orders` 订单表（认购/赎回，T+2 结算）
+- `V12` — `investment_plans` 投资计划表
+- `V13` — `holdings` 持仓表
 
-- `V3` — 基金主表 (`funds`)，含名称、代码、风险等级、管理费、起投金额等
-- `V4` — 基金净值历史表 (`fund_nav_history`)，记录每日 NAV
+### 种子数据（V14–V20）
 
-### 基金分析数据
+- `V14` — 11 只基金基础数据（SI-MM-01 货币基金、SI-BI-01/02 债券指数、SI-EI-01/02/03 股票指数、SI-MA-01~05 多资产组合）
+- `V15` — 演示用户（demo@smartinvest.com / Demo1234!）及初始演示数据
+- `V16` — 种子 NAV 及演示数据
+- `V17` — 2025-01-02 至 2026-04-07 完整 NAV 历史（约 329 个交易日 × 11 只基金 ≈ 3619 条记录）
+- `V18` — 基金资产/行业/地理配置及前 10 大持仓数据
+- `V19` — 演示订单
+- `V20` — 演示投资计划
 
-- `V5` — 资产配置表 (`fund_asset_allocations`)，按资产类别（股票/债券/现金等）分类
-- `V6` — 基金持仓表 (`fund_top_holdings`)，每只基金前 10 大持仓及权重
-- `V7` — 地理配置表 (`fund_geo_allocations`)，按地区（北美/欧洲/亚洲等）分类
-- `V8` — 行业配置表 (`fund_sector_allocations`），按 GICS 行业分类
+### 表结构（V21）
 
-### 投资相关
-
-- `V9` — 参考资产配置表 (`reference_asset_mix`），风险等级对应的参考配置
-- `V10` — 订单表 (`orders`)，支持认购/赎回，T+2 结算日期自动计算
-- `V11` — 投资计划表 (`investment_plans`)，月度定期投资计划
-- `V12` — 持仓表 (`holdings`)，用户实时持仓汇总
-
-### 种子数据
-
-- `V13` — 11 只基金基础数据（SI-MM-01 货币基金、SI-BI-01/02 债券指数、SI-EI-01/02/03 股票指数、SI-MA-01~05 多资产组合）
-- `V14` — 演示用户（demo@smartinvest.com / Demo1234!）及初始持仓
-- `V15` — 回填所有基金的当前 NAV（从最新净值历史）
-- `V16` — 补充 2025-01-02 至 2026-04-07 完整 NAV 历史（约 329 个交易日 × 11 只基金 ≈ 3619 条记录）
-- `V17` — 基金资产/行业/地理配置及前 10 大持仓数据
+- `V21` — `notifications` 通知表
 
 ---
 
 ## 四、API 端点
+
+> 所有请求都通过 `api-gateway`（:8080）进入，由网关将 `/api/*` 路由到对应服务。
 
 ### 认证模块 (`/api/auth`)
 
@@ -186,3 +188,28 @@ src/pages/
 ### 投资计划
 
 - PLAN-20260115-001：每月 HKD 1,000 投入 SI-EI-01，已完成 3 期
+
+---
+
+## 七、架构与部署
+
+后端拆分为 6 个 Maven 模块（5 个服务 + `common`），每个服务有独立的 Dockerfile，以容器形式部署在 AWS EC2 `t3.medium`（ap-southeast-1，新加坡）上的单节点 **K3S** 集群中。
+
+| 服务                   | 端口   | 职责                            |
+| --------------------- | ---- | ----------------------------- |
+| `api-gateway`         | 8080 | Spring Cloud Gateway，路由 `/api/*` |
+| `user-service`        | 8081 | 认证 + 用户 + 风险评估；负责 Flyway 迁移  |
+| `fund-service`        | 8082 | 基金目录 + NAV 历史                 |
+| `order-service`       | 8083 | 订单 + T+2 结算                   |
+| `notification-worker` | 8084 | RabbitMQ 消费者，邮件通知              |
+| `frontend`            | 80   | React SPA（nginx）              |
+
+有状态服务全部**在集群内运行**（不使用 RDS/MQ/ElastiCache）：`postgresql`（StatefulSet + PVC）、`rabbitmq`（Deployment + PVC）、`redis`（Deployment + PVC，默认禁用）。
+
+部署完全通过 IaC + Helm 完成：
+- **Terraform**（`infrastructure/terraform`）负责 VPC、EC2、S3、CloudFront + WAF。
+- **Helm umbrella chart**（`infrastructure/helm/umbrella`）通过 `helm upgrade --install smart-invest . --namespace smart-invest` 一键部署所有服务。
+- **CI/CD** — 单一 workflow `.github/workflows/cd-k3s.yml`（手动 `workflow_dispatch`）。
+- 镜像构建为 `gongchengship/smart-invest-<service>:1.0.0`（Mac arm64 → Ubuntu x86_64 构建机 → `k3s ctr image import`）。
+
+完整部署记录见 `infrastructure/deployment-guide.md`。
